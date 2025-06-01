@@ -174,6 +174,9 @@ class WorkflowEngine:
             process = self.game_controller.launch_game(game_config)
             if process:
                 logger.info(f"Game launch initiated: {game_config['config']['name']}")
+                # Add this line:
+                game_process = game_config['config'].get('process_name')
+                self.screen_analyzer.set_current_game(game_process)
                 return True
             return False
         except Exception as e:

@@ -87,9 +87,13 @@ class ScreenAnalyzer:
         
         # Create a new MSS instance for this thread
         with mss.mss() as sct:
+            # Get dynamic monitor
+            game_process = getattr(self, 'current_game_process', None)
+            monitor_index = self._get_game_monitor(game_process)
+            
             if region:
                 # Convert normalized region to pixel coordinates
-                monitor = sct.monitors[1]  # Primary monitor
+                monitor = sct.monitors[monitor_index]  # Dynamic monitor
                 x, y, right, bottom = region
                 width, height = monitor['width'], monitor['height']
                 
@@ -101,7 +105,7 @@ class ScreenAnalyzer:
                 sct_region = {'top': y, 'left': x, 'width': right - x, 'height': bottom - y}
                 sct_img = sct.grab(sct_region)
             else:
-                sct_img = sct.grab(sct.monitors[1])  # Primary monitor
+                sct_img = sct.grab(sct.monitors[monitor_index])  # Dynamic monitor
             
             # Convert to numpy array
             img = np.array(sct_img)
@@ -341,3 +345,33 @@ class ScreenAnalyzer:
         except Exception as e:
             logger.error(f"Error creating template: {e}")
             return None
+    
+    def set_current_game(self, game_process_name):
+        """Set current game for monitor detection"""
+        self.current_game_process = game_process_name
+
+    def _get_game_monitor(self, game_process_name=None):
+        """Dynamically find which monitor has the active game window"""
+        import mss
+        try:
+            if game_process_name:
+                import pyautogui
+                windows = pyautogui.getAllWindows()
+                
+                for window in windows:
+                    if game_process_name.lower() in window.title.lower():
+                        center_x = window.left + window.width // 2
+                        center_y = window.top + window.height // 2
+                        
+                        with mss.mss() as sct:
+                            for i, monitor in enumerate(sct.monitors[1:], 1):
+                                if (monitor['left'] <= center_x <= monitor['left'] + monitor['width'] and
+                                    monitor['top'] <= center_y <= monitor['top'] + monitor['height']):
+                                    logger.info(f"Game found on monitor {i}")
+                                    return i
+            
+            return self.settings.get('monitor_index', 1)
+            
+        except Exception as e:
+            logger.warning(f"Monitor detection failed: {e}")
+            return 1
