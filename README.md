@@ -60,7 +60,7 @@ Project Katana is a powerful, modular game automation framework designed for per
 | Game | Status | Templates | Workflow |
 |------|--------|-----------|----------|
 | **Counter-Strike 2** | ✅ Full Support | Main Menu, Workshop, Benchmark Map | Complete |
-| **Cyberpunk 2077** | 🔄 In Progress | Settings, Graphics, Benchmark | Partial |
+| **Black Myth Wukong** | 🔄 In Progress | Settings, Graphics, Benchmark | Partial |
 | **F1 24** | 📋 Planned | - | - |
 | **Custom Games** | ✅ Template System | User-defined | User-defined |
 
