@@ -1,0 +1,114 @@
+name: "CS2"
+type: "steam"
+app_id: "730"
+exe_name: "cs2.exe"
+process_name: "cs2"
+launch_options: "-novid -console"
+startup_time: 45
+
+workflow:
+  # ===== GAME LAUNCH =====
+  - action: "launch_game"
+  
+  - action: "wait_for_game"
+    timeout: 60
+  
+  # ===== WAIT FOR MAIN MENU =====
+  - action: "wait_for_template"
+    template: "main_menu.png"
+    timeout: 90
+  
+  - action: "take_screenshot"
+    name: "01_main_menu_loaded"
+  
+  # ===== NAVIGATE TO BENCHMARK =====
+  # Click Play button (with custom timing)
+  - action: "click_template"
+    template: "play_button.png"
+    timeout: 15
+    move_duration: 0.8      # Slower movement for accuracy
+    pre_click_delay: 0.5    # Wait before clicking
+    post_click_delay: 1.0   # Wait after clicking
+  
+  - action: "take_screenshot"
+    name: "02_after_play_click"
+  
+  # Click Workshop Maps (with custom timing)
+  - action: "click_template"
+    template: "workshop_map.png"
+    timeout: 20
+    move_duration: 0.6      # Medium speed
+    pre_click_delay: 0.4    
+    post_click_delay: 0.8
+  
+  - action: "take_screenshot"
+    name: "03_workshop_maps_page"
+  
+  # Click FPS Benchmark map (with slower timing for precision)
+  - action: "click_template"
+    template: "fps_benchmark_map.png"
+    timeout: 30
+    move_duration: 1.0      # Very slow for precision
+    pre_click_delay: 0.6    
+    post_click_delay: 1.2
+  
+  - action: "take_screenshot"
+    name: "04_benchmark_map_selected"
+  
+  # Click GO button (with standard timing)
+  - action: "click_template"
+    template: "go_button.png"
+    timeout: 15
+    move_duration: 0.5      # Normal speed
+    pre_click_delay: 0.3    
+    post_click_delay: 0.8
+  
+  - action: "take_screenshot"
+    name: "05_benchmark_starting"
+  
+  # ===== WAIT FOR BENCHMARK TO COMPLETE =====
+  - action: "wait"
+    seconds: 30  # Wait for initial loading
+  
+  - action: "take_screenshot"
+    name: "06_benchmark_running"
+  
+  - action: "wait"
+    seconds: 180  # Wait for benchmark (3 minutes)
+  
+  - action: "wait"
+    seconds: 30   # Wait for results to appear
+  
+  # ===== CAPTURE RESULTS =====
+  - action: "take_screenshot"
+    name: "07_benchmark_results_final"
+  
+  - action: "wait"
+    seconds: 10
+  
+  # ===== EXIT BENCHMARK =====
+  # Try quit button (with gentle timing)
+  - action: "click_template_if_exists"
+    template: "quit_button.png"
+    timeout: 10
+    move_duration: 0.5
+    pre_click_delay: 0.3
+    post_click_delay: 1.0
+    optional: true
+  
+  # Fallback: ESC key
+  - action: "press_key"
+    key: "escape"
+    delay: 2
+  
+  - action: "take_screenshot"
+    name: "08_workflow_complete"
+
+# Template references (for documentation)
+screens:
+  main_menu: "templates/screens/cs2/main_menu.png"
+  play_button: "templates/screens/cs2/play_button.png"
+  workshop_map: "templates/screens/cs2/workshop_map.png"
+  fps_benchmark_map: "templates/screens/cs2/fps_benchmark_map.png"
+  go_button: "templates/screens/cs2/go_button.png"
+  quit_button: "templates/screens/cs2/quit_button.png"

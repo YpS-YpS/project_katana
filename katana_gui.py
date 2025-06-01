@@ -1,0 +1,1014 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog, simpledialog
+import threading
+import yaml
+import os
+import logging
+import time
+from pathlib import Path
+from datetime import datetime
+
+class KatanaGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("🗡️ Project Katana - Game Automation Tool")
+        self.root.geometry("1000x800")
+        self.root.minsize(1000, 800)
+        
+        # Set modern theme and styling
+        self._setup_styling()
+        
+        # Initialize variables
+        self.game_finder = None
+        self.game_controller = None
+        self.workflow_engine = None
+        self.screen_analyzer = None
+        self.games = {}
+        self.selected_game = None
+        
+        # Set up logging first
+        self._setup_logging()
+        
+        # Try to initialize components
+        self._initialize_components()
+        
+        # Create the GUI
+        self.create_widgets()
+    
+    def _setup_styling(self):
+        """Set up modern styling for the GUI"""
+        # Configure ttk styles
+        style = ttk.Style()
+        
+        # Use a modern theme
+        available_themes = style.theme_names()
+        if 'clam' in available_themes:
+            style.theme_use('clam')
+        elif 'vista' in available_themes:
+            style.theme_use('vista')
+        
+        # Configure custom styles
+        style.configure('Title.TLabel', font=('Segoe UI', 14, 'bold'))
+        style.configure('Subtitle.TLabel', font=('Segoe UI', 10, 'bold'))
+        style.configure('Status.TLabel', font=('Segoe UI', 9))
+        
+        # Configure button styles
+        style.configure('Action.TButton', font=('Segoe UI', 9, 'bold'))
+        style.configure('Success.TButton', font=('Segoe UI', 9, 'bold'))
+        style.configure('Warning.TButton', font=('Segoe UI', 9, 'bold'))
+        
+        # Set window background
+        self.root.configure(bg='#f0f0f0')
+    
+    def _setup_logging(self):
+        """Set up basic logging"""
+        try:
+            log_dir = os.path.join("output", "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, f"katana_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+            
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                handlers=[
+                    logging.FileHandler(log_file),
+                    logging.StreamHandler()
+                ]
+            )
+            self.logger = logging.getLogger(__name__)
+            self.logger.info("🗡️ Katana logging initialized")
+        except Exception as e:
+            print(f"Failed to setup logging: {e}")
+            self.logger = logging.getLogger(__name__)
+    
+    def _initialize_components(self):
+        """Initialize Katana components with error handling"""
+        try:
+            # Check if config directory exists
+            if not os.path.exists("config"):
+                self._create_default_config()
+            
+            # Check if settings.yaml exists
+            if not os.path.exists("config/settings.yaml"):
+                self._create_default_settings()
+            
+            # Import and initialize components
+            from katana.core.game_finder import GameFinder
+            from katana.core.game_controller import GameController
+            from katana.core.workflow_engine import WorkflowEngine
+            from katana.core.screen_analyzer import ScreenAnalyzer
+            
+            self.game_finder = GameFinder()
+            self.game_controller = GameController()
+            self.workflow_engine = WorkflowEngine()
+            self.screen_analyzer = ScreenAnalyzer()
+            
+            # Find installed games
+            self.games = self.game_finder.find_all_games()
+            self.logger.info(f"✅ Initialization successful. Found {len(self.games)} games.")
+            
+        except Exception as e:
+            error_msg = f"Failed to initialize: {str(e)}"
+            self.logger.error(error_msg)
+            messagebox.showerror("Initialization Error", error_msg)
+            # Continue with empty games dict
+            self.games = {}
+    
+    def _create_default_config(self):
+        """Create default configuration directory and files"""
+        try:
+            os.makedirs("config/games", exist_ok=True)
+            os.makedirs("templates/screens", exist_ok=True)
+            self.logger.info("📁 Created config directory")
+        except Exception as e:
+            self.logger.error(f"Failed to create config directory: {e}")
+    
+    def _create_default_settings(self):
+        """Create default settings.yaml file"""
+        default_settings = {
+            'steam_path': 'C:/Program Files (x86)/Steam',
+            'epic_path': 'C:/Program Files/Epic Games',
+            'steam_launch_options': '',
+            'screenshot_dir': 'output/screenshots',
+            'log_level': 'INFO',
+            'template_matching_threshold': 0.8,
+            'input_delay': 0.5,
+            'timeout': 300,
+            'mouse_move_duration': 0.6,
+            'pre_click_delay': 0.4,
+            'post_click_delay': 0.8
+        }
+        
+        try:
+            with open("config/settings.yaml", "w") as f:
+                yaml.dump(default_settings, f, default_flow_style=False)
+            self.logger.info("⚙️ Created default settings.yaml")
+        except Exception as e:
+            self.logger.error(f"Failed to create settings.yaml: {e}")
+    
+    def create_widgets(self):
+        # Create main header
+        header_frame = tk.Frame(self.root, bg='#2c3e50', height=60)
+        header_frame.pack(fill=tk.X)
+        header_frame.pack_propagate(False)
+        
+        title_label = tk.Label(header_frame, text="🗡️ PROJECT KATANA", 
+                              font=('Segoe UI', 18, 'bold'), 
+                              fg='white', bg='#2c3e50')
+        title_label.pack(side=tk.LEFT, padx=20, pady=15)
+        
+        subtitle_label = tk.Label(header_frame, text="Game Automation & Benchmarking Framework", 
+                                 font=('Segoe UI', 10), 
+                                 fg='#bdc3c7', bg='#2c3e50')
+        subtitle_label.pack(side=tk.LEFT, padx=(0, 20), pady=15)
+        
+        # Version info
+        version_label = tk.Label(header_frame, text="v1.0.0", 
+                                font=('Segoe UI', 8), 
+                                fg='#95a5a6', bg='#2c3e50')
+        version_label.pack(side=tk.RIGHT, padx=20, pady=15)
+        
+        # Create notebook for tabs with modern styling
+        style = ttk.Style()
+        style.configure('Modern.TNotebook', tabposition='n')
+        style.configure('Modern.TNotebook.Tab', padding=[20, 10])
+        
+        self.notebook = ttk.Notebook(self.root, style='Modern.TNotebook')
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+        
+        # Create tabs with icons
+        self.main_tab = ttk.Frame(self.notebook)
+        self.template_tab = ttk.Frame(self.notebook)
+        self.workflow_tab = ttk.Frame(self.notebook)
+        
+        self.notebook.add(self.main_tab, text="🎮 Games & Control")
+        self.notebook.add(self.template_tab, text="🎯 Template Tools")
+        self.notebook.add(self.workflow_tab, text="⚙️ Workflow Editor")
+        
+        # Setup each tab
+        self.setup_main_tab()
+        self.setup_template_tab()
+        self.setup_workflow_tab()
+        
+        # Status bar with modern styling
+        status_frame = tk.Frame(self.root, bg='#34495e', height=30)
+        status_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        status_frame.pack_propagate(False)
+        
+        self.status_var = tk.StringVar()
+        self.status_var.set("🚀 Ready" if self.games else "⚠️ No games found - Check configuration")
+        
+        self.status_bar = tk.Label(status_frame, textvariable=self.status_var, 
+                                  font=('Segoe UI', 9), fg='white', bg='#34495e', 
+                                  anchor=tk.W, padx=10)
+        self.status_bar.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=5)
+        
+        # Add status icons
+        time_label = tk.Label(status_frame, text=datetime.now().strftime("%H:%M"), 
+                             font=('Segoe UI', 9), fg='#bdc3c7', bg='#34495e')
+        time_label.pack(side=tk.RIGHT, padx=10, pady=5)
+    
+    def setup_main_tab(self):
+        # Create main container with modern styling
+        main_container = tk.Frame(self.main_tab, bg='#ecf0f1')
+        main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Create game selection frame with enhanced styling
+        game_frame = tk.LabelFrame(main_container, text=" 🎮 Game Selection ", 
+                                  font=('Segoe UI', 11, 'bold'), 
+                                  fg='#2c3e50', bg='#ecf0f1',
+                                  relief=tk.RIDGE, bd=2)
+        game_frame.pack(fill=tk.X, pady=(0, 10), padx=5)
+        
+        # Game list with modern styling
+        list_container = tk.Frame(game_frame, bg='#ecf0f1')
+        list_container.pack(fill=tk.X, padx=10, pady=10)
+        
+        tk.Label(list_container, text="📋 Available Games:", 
+                font=('Segoe UI', 10, 'bold'), 
+                fg='#34495e', bg='#ecf0f1').pack(anchor=tk.W, pady=(0, 5))
+        
+        # Game listbox with scrollbar
+        list_frame = tk.Frame(list_container, bg='#ecf0f1')
+        list_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.game_listbox = tk.Listbox(list_frame, height=6, 
+                                      font=('Segoe UI', 9),
+                                      selectbackground='#3498db',
+                                      selectforeground='white',
+                                      bg='white', fg='#2c3e50',
+                                      relief=tk.FLAT, bd=1)
+        self.game_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        game_scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, 
+                                      command=self.game_listbox.yview)
+        game_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.game_listbox.config(yscrollcommand=game_scrollbar.set)
+        
+        # Populate game list
+        self._populate_game_list()
+        
+        # Game details with modern styling
+        tk.Label(list_container, text="ℹ️ Game Details:", 
+                font=('Segoe UI', 10, 'bold'), 
+                fg='#34495e', bg='#ecf0f1').pack(anchor=tk.W, pady=(10, 5))
+        
+        self.details_text = tk.Text(list_container, height=4, wrap=tk.WORD,
+                                   font=('Segoe UI', 9), bg='white', fg='#2c3e50',
+                                   relief=tk.FLAT, bd=1)
+        self.details_text.pack(fill=tk.X, pady=(0, 10))
+        self.details_text.config(state=tk.DISABLED)
+        
+        # Action buttons with modern styling
+        button_frame = tk.Frame(list_container, bg='#ecf0f1')
+        button_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Button(button_frame, text="🔄 Refresh", 
+                  command=self.refresh_games).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="🔧 Test Components", 
+                  command=self.test_components).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="📊 Check Status", 
+                  command=self.check_game_status).pack(side=tk.LEFT, padx=5)
+        
+        # Workflow control frame
+        workflow_frame = tk.LabelFrame(main_container, text=" ⚡ Workflow Control ", 
+                                      font=('Segoe UI', 11, 'bold'), 
+                                      fg='#2c3e50', bg='#ecf0f1',
+                                      relief=tk.RIDGE, bd=2)
+        workflow_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0), padx=5)
+        
+        # Control buttons with enhanced styling
+        control_container = tk.Frame(workflow_frame, bg='#ecf0f1')
+        control_container.pack(fill=tk.X, padx=10, pady=10)
+        
+        wf_button_frame = tk.Frame(control_container, bg='#ecf0f1')
+        wf_button_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Main action buttons
+        self.start_button = ttk.Button(wf_button_frame, text="▶️ Start Workflow", 
+                                      command=self.start_workflow)
+        self.start_button.pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.launch_button = ttk.Button(wf_button_frame, text="🚀 Launch Game", 
+                                       command=self.launch_game)
+        self.launch_button.pack(side=tk.LEFT, padx=5)
+        
+        self.close_button = ttk.Button(wf_button_frame, text="🛑 Close Game", 
+                                      command=self.close_game)
+        self.close_button.pack(side=tk.LEFT, padx=5)
+        
+        self.stop_button = ttk.Button(wf_button_frame, text="⏹️ Stop Workflow", 
+                                     command=self.stop_workflow)
+        self.stop_button.pack(side=tk.LEFT, padx=5)
+        self.stop_button.config(state=tk.DISABLED)
+        
+        # Workflow log with modern styling
+        tk.Label(control_container, text="📝 Workflow Log:", 
+                font=('Segoe UI', 10, 'bold'), 
+                fg='#34495e', bg='#ecf0f1').pack(anchor=tk.W, pady=(10, 5))
+        
+        log_frame = tk.Frame(control_container, bg='#ecf0f1')
+        log_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.log_text = tk.Text(log_frame, wrap=tk.WORD, 
+                               font=('Consolas', 9), bg='#2c3e50', fg='#ecf0f1',
+                               relief=tk.FLAT, bd=1)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        log_scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, 
+                                     command=self.log_text.yview)
+        log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.config(yscrollcommand=log_scrollbar.set)
+        
+        # Log control buttons
+        log_control_frame = tk.Frame(control_container, bg='#ecf0f1')
+        log_control_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        ttk.Button(log_control_frame, text="🗑️ Clear", 
+                  command=self.clear_log).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(log_control_frame, text="💾 Save", 
+                  command=self.save_log).pack(side=tk.RIGHT)
+        
+        # Set up game selection event
+        self.game_listbox.bind('<<ListboxSelect>>', self.on_game_select)
+    
+    def setup_template_tab(self):
+        """Setup the enhanced template tools tab"""
+        template_container = tk.Frame(self.template_tab, bg='#ecf0f1')
+        template_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Template capture section with modern styling
+        capture_frame = tk.LabelFrame(template_container, text=" 🎯 Template Capture & Testing ", 
+                                     font=('Segoe UI', 11, 'bold'), 
+                                     fg='#2c3e50', bg='#ecf0f1',
+                                     relief=tk.RIDGE, bd=2)
+        capture_frame.pack(fill=tk.X, pady=(0, 10), padx=5)
+        
+        capture_content = tk.Frame(capture_frame, bg='#ecf0f1')
+        capture_content.pack(fill=tk.X, padx=15, pady=15)
+        
+        tk.Label(capture_content, text="📸 Capture UI elements for template matching:", 
+                font=('Segoe UI', 10), fg='#34495e', bg='#ecf0f1').pack(anchor=tk.W, pady=(0, 10))
+        
+        # Capture buttons with enhanced styling
+        capture_button_frame = tk.Frame(capture_content, bg='#ecf0f1')
+        capture_button_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Button(capture_button_frame, text="📷 Quick Screenshot", 
+                  command=self.take_quick_screenshot).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(capture_button_frame, text="🎯 Capture Template", 
+                  command=self.capture_template).pack(side=tk.LEFT, padx=5)
+        ttk.Button(capture_button_frame, text="🧪 Test Template", 
+                  command=self.test_template).pack(side=tk.LEFT, padx=5)
+        ttk.Button(capture_button_frame, text="👁️ Monitor Template", 
+                  command=self.monitor_template).pack(side=tk.LEFT, padx=5)
+        
+        # Template management section
+        manage_frame = tk.LabelFrame(template_container, text=" 📁 Template Management ", 
+                                    font=('Segoe UI', 11, 'bold'), 
+                                    fg='#2c3e50', bg='#ecf0f1',
+                                    relief=tk.RIDGE, bd=2)
+        manage_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0), padx=5)
+        
+        manage_content = tk.Frame(manage_frame, bg='#ecf0f1')
+        manage_content.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        # Template list with modern styling
+        tk.Label(manage_content, text="📋 Available Templates:", 
+                font=('Segoe UI', 10, 'bold'), 
+                fg='#34495e', bg='#ecf0f1').pack(anchor=tk.W, pady=(0, 5))
+        
+        list_frame = tk.Frame(manage_content, bg='#ecf0f1')
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        self.template_listbox = tk.Listbox(list_frame, font=('Segoe UI', 9),
+                                          selectbackground='#e74c3c',
+                                          selectforeground='white',
+                                          bg='white', fg='#2c3e50',
+                                          relief=tk.FLAT, bd=1)
+        self.template_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        template_scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, 
+                                          command=self.template_listbox.yview)
+        template_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.template_listbox.config(yscrollcommand=template_scrollbar.set)
+        
+        # Template management buttons
+        template_button_frame = tk.Frame(manage_content, bg='#ecf0f1')
+        template_button_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Button(template_button_frame, text="🔄 Refresh", 
+                  command=self.refresh_templates).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(template_button_frame, text="📂 Open Folder", 
+                  command=self.open_templates_folder).pack(side=tk.LEFT, padx=5)
+        ttk.Button(template_button_frame, text="👀 View Template", 
+                  command=self.view_template).pack(side=tk.LEFT, padx=5)
+        
+        # Refresh template list initially
+        self.refresh_templates()
+    
+    def setup_workflow_tab(self):
+        """Setup the workflow editor tab"""
+        workflow_container = tk.Frame(self.workflow_tab, bg='#ecf0f1')
+        workflow_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Coming soon section with modern styling
+        coming_soon_frame = tk.LabelFrame(workflow_container, text=" ⚙️ Workflow Editor ", 
+                                         font=('Segoe UI', 11, 'bold'), 
+                                         fg='#2c3e50', bg='#ecf0f1',
+                                         relief=tk.RIDGE, bd=2)
+        coming_soon_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        content_frame = tk.Frame(coming_soon_frame, bg='#ecf0f1')
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Center content
+        center_frame = tk.Frame(content_frame, bg='#ecf0f1')
+        center_frame.pack(expand=True)
+        
+        tk.Label(center_frame, text="🚧 Visual Workflow Editor", 
+                font=('Segoe UI', 18, 'bold'), 
+                fg='#e67e22', bg='#ecf0f1').pack(pady=10)
+        
+        tk.Label(center_frame, text="Coming Soon!", 
+                font=('Segoe UI', 14), 
+                fg='#95a5a6', bg='#ecf0f1').pack(pady=5)
+        
+        tk.Label(center_frame, text="For now, edit YAML files directly using the button below:", 
+                font=('Segoe UI', 10), 
+                fg='#7f8c8d', bg='#ecf0f1').pack(pady=10)
+        
+        ttk.Button(center_frame, text="📁 Open Config Folder", 
+                  command=self.open_config_folder).pack(pady=10)
+        
+        # Add workflow preview area
+        preview_frame = tk.LabelFrame(content_frame, text=" 📋 Current Workflow Preview ", 
+                                     font=('Segoe UI', 10, 'bold'), 
+                                     fg='#34495e', bg='#ecf0f1')
+        preview_frame.pack(fill=tk.BOTH, expand=True, pady=(20, 0))
+        
+        self.workflow_preview = tk.Text(preview_frame, height=15, wrap=tk.WORD,
+                                       font=('Consolas', 9), bg='white', fg='#2c3e50',
+                                       relief=tk.FLAT, bd=1, state=tk.DISABLED)
+        self.workflow_preview.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    def monitor_template(self):
+        """Monitor a template continuously with real-time confidence updates"""
+        if not self.screen_analyzer:
+            messagebox.showerror("Error", "Screen analyzer not initialized")
+            return
+        
+        # Get template file
+        template_file = filedialog.askopenfilename(
+            title="Select Template to Monitor",
+            initialdir="templates/screens",
+            filetypes=[("PNG files", "*.png"), ("All files", "*.*")]
+        )
+        
+        if not template_file:
+            return
+        
+        # Get monitoring parameters
+        params = self._get_monitoring_parameters()
+        if not params:
+            return
+        
+        # Start monitoring
+        self._start_template_monitoring(template_file, params)
+
+    def _get_monitoring_parameters(self):
+        """Get monitoring parameters from user with modern styling"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("👁️ Template Monitoring Settings")
+        dialog.geometry("450x400")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.configure(bg='#ecf0f1')
+        
+        # Center the dialog
+        dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 100, self.root.winfo_rooty() + 100))
+        
+        # Variables for parameters
+        poll_interval = tk.DoubleVar(value=1.0)
+        duration = tk.IntVar(value=30)
+        threshold = tk.DoubleVar(value=0.8)
+        switch_to_game = tk.BooleanVar(value=True)
+        
+        result = [None]  # Store result
+        
+        # Create UI with modern styling
+        main_frame = tk.Frame(dialog, bg='#ecf0f1', padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        title_label = tk.Label(main_frame, text="👁️ Template Monitoring Setup", 
+                              font=('Segoe UI', 14, 'bold'), 
+                              fg='#2c3e50', bg='#ecf0f1')
+        title_label.pack(pady=(0, 20))
+        
+        # Poll interval section
+        poll_frame = tk.LabelFrame(main_frame, text=" ⏱️ Poll Interval ", 
+                                  font=('Segoe UI', 10, 'bold'), 
+                                  fg='#34495e', bg='#ecf0f1')
+        poll_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        poll_content = tk.Frame(poll_frame, bg='#ecf0f1')
+        poll_content.pack(fill=tk.X, padx=10, pady=10)
+        
+        tk.Label(poll_content, text="Check every:", 
+                font=('Segoe UI', 9), fg='#34495e', bg='#ecf0f1').pack(anchor=tk.W)
+        
+        poll_scale = ttk.Scale(poll_content, from_=0.5, to=5.0, variable=poll_interval, 
+                              orient=tk.HORIZONTAL, length=300)
+        poll_scale.pack(fill=tk.X, pady=5)
+        
+        poll_label = tk.Label(poll_content, text="1.0 seconds", 
+                             font=('Segoe UI', 9), fg='#7f8c8d', bg='#ecf0f1')
+        poll_label.pack(anchor=tk.W)
+        
+        def update_poll_label(val):
+            poll_label.config(text=f"{float(val):.1f} seconds")
+        poll_scale.config(command=update_poll_label)
+        
+        # Duration section
+        duration_frame = tk.LabelFrame(main_frame, text=" 🕐 Duration ", 
+                                      font=('Segoe UI', 10, 'bold'), 
+                                      fg='#34495e', bg='#ecf0f1')
+        duration_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        duration_content = tk.Frame(duration_frame, bg='#ecf0f1')
+        duration_content.pack(fill=tk.X, padx=10, pady=10)
+        
+        tk.Label(duration_content, text="Monitor for:", 
+                font=('Segoe UI', 9), fg='#34495e', bg='#ecf0f1').pack(side=tk.LEFT)
+        
+        duration_spin = ttk.Spinbox(duration_content, from_=10, to=300, textvariable=duration, width=10)
+        duration_spin.pack(side=tk.LEFT, padx=(10, 5))
+        
+        tk.Label(duration_content, text="seconds", 
+                font=('Segoe UI', 9), fg='#34495e', bg='#ecf0f1').pack(side=tk.LEFT)
+        
+        # Threshold section
+        threshold_frame = tk.LabelFrame(main_frame, text=" 🎯 Detection Threshold ", 
+                                       font=('Segoe UI', 10, 'bold'), 
+                                       fg='#34495e', bg='#ecf0f1')
+        threshold_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        threshold_content = tk.Frame(threshold_frame, bg='#ecf0f1')
+        threshold_content.pack(fill=tk.X, padx=10, pady=10)
+        
+        threshold_scale = ttk.Scale(threshold_content, from_=0.1, to=1.0, variable=threshold, 
+                                   orient=tk.HORIZONTAL, length=300)
+        threshold_scale.pack(fill=tk.X, pady=5)
+        
+        threshold_label = tk.Label(threshold_content, text="0.8 (80%)", 
+                                  font=('Segoe UI', 9), fg='#7f8c8d', bg='#ecf0f1')
+        threshold_label.pack(anchor=tk.W)
+        
+        def update_threshold_label(val):
+            threshold_label.config(text=f"{float(val):.2f} ({float(val)*100:.0f}%)")
+        threshold_scale.config(command=update_threshold_label)
+        
+        # Options section
+        options_frame = tk.LabelFrame(main_frame, text=" ⚙️ Options ", 
+                                     font=('Segoe UI', 10, 'bold'), 
+                                     fg='#34495e', bg='#ecf0f1')
+        options_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        options_content = tk.Frame(options_frame, bg='#ecf0f1')
+        options_content.pack(fill=tk.X, padx=10, pady=10)
+        
+        tk.Checkbutton(options_content, text="🔄 Switch to game window first (Alt+Tab)", 
+                      variable=switch_to_game, font=('Segoe UI', 9),
+                      fg='#34495e', bg='#ecf0f1', selectcolor='#3498db').pack(anchor=tk.W)
+        
+        # Buttons
+        button_frame = tk.Frame(main_frame, bg='#ecf0f1')
+        button_frame.pack(fill=tk.X)
+        
+        def on_start():
+            result[0] = {
+                'poll_interval': poll_interval.get(),
+                'duration': duration.get(),
+                'threshold': threshold.get(),
+                'switch_to_game': switch_to_game.get()
+            }
+            dialog.destroy()
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        ttk.Button(button_frame, text="▶️ Start Monitoring", 
+                  command=on_start).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(button_frame, text="❌ Cancel", 
+                  command=on_cancel).pack(side=tk.RIGHT)
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        
+        return result[0]
+
+    def _start_template_monitoring(self, template_file, params):
+        """Start template monitoring with real-time updates and modern UI"""
+        template_name = Path(template_file).name
+        
+        # Create monitoring dialog with modern styling
+        monitor_dialog = tk.Toplevel(self.root)
+        monitor_dialog.title(f"👁️ Monitoring: {template_name}")
+        monitor_dialog.geometry("600x500")
+        monitor_dialog.transient(self.root)
+        monitor_dialog.configure(bg='#ecf0f1')
+        
+        # Center the dialog
+        monitor_dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 50, self.root.winfo_rooty() + 50))
+        
+        # Make it stay on top
+        monitor_dialog.attributes('-topmost', True)
+        
+        # Create monitoring UI with modern styling
+        main_frame = tk.Frame(monitor_dialog, bg='#ecf0f1', padx=15, pady=15)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title and status
+        title_label = tk.Label(main_frame, text=f"👁️ Monitoring: {template_name}", 
+                              font=('Segoe UI', 14, 'bold'), 
+                              fg='#2c3e50', bg='#ecf0f1')
+        title_label.pack(pady=(0, 10))
+        
+        status_label = tk.Label(main_frame, text="🔄 Preparing to monitor...", 
+                               font=('Segoe UI', 11), 
+                               fg='#34495e', bg='#ecf0f1')
+        status_label.pack()
+        
+        # Current confidence display with modern styling
+        confidence_frame = tk.LabelFrame(main_frame, text=" 🎯 Real-time Detection ", 
+                                        font=('Segoe UI', 10, 'bold'), 
+                                        fg='#2c3e50', bg='#ecf0f1',
+                                        relief=tk.RIDGE, bd=2)
+        confidence_frame.pack(fill=tk.X, pady=15)
+        
+        conf_content = tk.Frame(confidence_frame, bg='#ecf0f1')
+        conf_content.pack(fill=tk.X, padx=15, pady=15)
+        
+        confidence_label = tk.Label(conf_content, text="Confidence: --", 
+                                    font=('Segoe UI', 18, 'bold'), 
+                                    fg='#e74c3c', bg='#ecf0f1')
+        confidence_label.pack()
+        
+        match_label = tk.Label(conf_content, text="Status: Waiting...", 
+                              font=('Segoe UI', 12), 
+                              fg='#95a5a6', bg='#ecf0f1')
+        match_label.pack(pady=(5, 0))
+        
+        # Progress bar with modern styling
+        progress_var = tk.DoubleVar()
+        progress = ttk.Progressbar(main_frame, variable=progress_var, maximum=100, 
+                                  length=400, style='Modern.Horizontal.TProgressbar')
+        progress.pack(fill=tk.X, pady=10)
+        
+        # Log area with modern styling
+        log_frame = tk.LabelFrame(main_frame, text=" 📝 Detection Log ", 
+                                 font=('Segoe UI', 10, 'bold'), 
+                                 fg='#2c3e50', bg='#ecf0f1',
+                                 relief=tk.RIDGE, bd=2)
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        log_container = tk.Frame(log_frame, bg='#ecf0f1')
+        log_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        log_text = tk.Text(log_container, height=10, wrap=tk.WORD,
+                          font=('Consolas', 9), bg='#2c3e50', fg='#ecf0f1',
+                          relief=tk.FLAT, bd=1)
+        log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        log_scroll = ttk.Scrollbar(log_container, orient=tk.VERTICAL, command=log_text.yview)
+        log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        log_text.config(yscrollcommand=log_scroll.set)
+        
+        # Control buttons with modern styling
+        button_frame = tk.Frame(main_frame, bg='#ecf0f1')
+        button_frame.pack(fill=tk.X, pady=10)
+        
+        stop_monitoring = [False]  # Use list for closure
+        
+        def stop_monitor():
+            stop_monitoring[0] = True
+            monitor_dialog.destroy()
+        
+        def take_reference():
+            try:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"monitor_reference_{timestamp}"
+                path = self.screen_analyzer.save_screenshot(filename)
+                if path:
+                    log_text.insert(tk.END, f"📸 {datetime.now().strftime('%H:%M:%S')} - Reference screenshot: {filename}.png\n")
+                    log_text.see(tk.END)
+            except Exception as e:
+                log_text.insert(tk.END, f"❌ {datetime.now().strftime('%H:%M:%S')} - Screenshot failed: {e}\n")
+                log_text.see(tk.END)
+        
+        ttk.Button(button_frame, text="⏹️ Stop Monitoring", 
+                  command=stop_monitor).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="📸 Take Reference", 
+                  command=take_reference).pack(side=tk.LEFT)
+        
+        # Start monitoring in separate thread
+        threading.Thread(
+            target=self._template_monitoring_thread,
+            args=(template_file, params, monitor_dialog, status_label, confidence_label, 
+                  match_label, progress_var, log_text, stop_monitoring),
+            daemon=True
+        ).start()
+
+    def _template_monitoring_thread(self, template_file, params, dialog, status_label, 
+                                   confidence_label, match_label, progress_var, log_text, stop_monitoring):
+        """Run template monitoring in separate thread"""
+        try:
+            template_name = Path(template_file).name
+            poll_interval = params['poll_interval']
+            duration = params['duration']
+            threshold = params['threshold']
+            switch_to_game = params['switch_to_game']
+            
+            # Switch to game if requested
+            if switch_to_game:
+                self.root.after(0, lambda: status_label.config(text="🔄 Switching to game..."))
+                time.sleep(2)
+                
+                import pyautogui
+                pyautogui.hotkey('alt', 'tab')
+                time.sleep(3)
+            
+            # Start monitoring
+            start_time = time.time()
+            detection_count = 0
+            total_polls = 0
+            best_confidence = 0
+            
+            self.root.after(0, lambda: status_label.config(text="👁️ Monitoring active..."))
+            self.root.after(0, lambda: log_text.insert(tk.END, f"🔍 {datetime.now().strftime('%H:%M:%S')} - Started monitoring {template_name}\n"))
+            self.root.after(0, lambda: log_text.insert(tk.END, f"⚙️ {datetime.now().strftime('%H:%M:%S')} - Poll: {poll_interval}s, Duration: {duration}s, Threshold: {threshold:.2f}\n\n"))
+            
+            while time.time() - start_time < duration and not stop_monitoring[0]:
+                try:
+                    # Calculate progress
+                    elapsed = time.time() - start_time
+                    progress = (elapsed / duration) * 100
+                    self.root.after(0, lambda p=progress: progress_var.set(p))
+                    
+                    # Get confidence
+                    confidence = self._get_template_confidence(template_file)
+                    total_polls += 1
+                    
+                    if confidence > best_confidence:
+                        best_confidence = confidence
+                    
+                    # Check if detected
+                    detected = confidence >= threshold
+                    if detected:
+                        detection_count += 1
+                    
+                    # Update UI
+                    confidence_percent = confidence * 100
+                    self.root.after(0, lambda c=confidence_percent: confidence_label.config(
+                        text=f"Confidence: {c:.1f}%",
+                        fg="#27ae60" if c >= threshold * 100 else "#e74c3c"
+                    ))
+                    
+                    status_text = "✅ DETECTED!" if detected else "❌ Not detected"
+                    status_color = "#27ae60" if detected else "#e74c3c"
+                    self.root.after(0, lambda s=status_text, c=status_color: match_label.config(
+                        text=f"Status: {s}", fg=c
+                    ))
+                    
+                    # Log significant events
+                    if detected:
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        self.root.after(0, lambda t=timestamp, c=confidence_percent: log_text.insert(
+                            tk.END, f"✅ {t} - DETECTED! Confidence: {c:.1f}%\n"
+                        ))
+                        self.root.after(0, lambda: log_text.see(tk.END))
+                    elif confidence > 0.5:  # Log near misses
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        self.root.after(0, lambda t=timestamp, c=confidence_percent: log_text.insert(
+                            tk.END, f"🟡 {t} - Near miss: {c:.1f}%\n"
+                        ))
+                        self.root.after(0, lambda: log_text.see(tk.END))
+                    
+                    # Wait for next poll
+                    time.sleep(poll_interval)
+                    
+                except Exception as e:
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    self.root.after(0, lambda t=timestamp, err=str(e): log_text.insert(tk.END, f"⚠️ {t} - Error: {err}\n"))
+                    self.root.after(0, lambda: log_text.see(tk.END))
+                    time.sleep(poll_interval)
+            
+            # Monitoring complete
+            detection_rate = (detection_count / total_polls * 100) if total_polls > 0 else 0
+            
+            self.root.after(0, lambda: status_label.config(text="✅ Monitoring complete"))
+            self.root.after(0, lambda: log_text.insert(tk.END, f"\n📊 MONITORING SUMMARY:\n"))
+            self.root.after(0, lambda: log_text.insert(tk.END, f"   Duration: {duration}s\n"))
+            self.root.after(0, lambda: log_text.insert(tk.END, f"   Total polls: {total_polls}\n"))
+            self.root.after(0, lambda: log_text.insert(tk.END, f"   Detections: {detection_count}\n"))
+            self.root.after(0, lambda: log_text.insert(tk.END, f"   Detection rate: {detection_rate:.1f}%\n"))
+            self.root.after(0, lambda: log_text.insert(tk.END, f"   Best confidence: {best_confidence*100:.1f}%\n"))
+            self.root.after(0, lambda: log_text.see(tk.END))
+            
+            # Show summary dialog
+            if not stop_monitoring[0]:
+                summary_msg = (f"👁️ Monitoring Complete!\n\n"
+                             f"Template: {template_name}\n"
+                             f"Duration: {duration}s\n"
+                             f"Detections: {detection_count}/{total_polls} polls\n"
+                             f"Detection rate: {detection_rate:.1f}%\n"
+                             f"Best confidence: {best_confidence*100:.1f}%")
+                
+                self.root.after(0, lambda: messagebox.showinfo("Monitoring Complete", summary_msg))
+            
+        except Exception as e:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            self.root.after(0, lambda t=timestamp: log_text.insert(tk.END, f"❌ {t} - Monitoring failed: {str(e)}\n"))
+            self.root.after(0, lambda: log_text.see(tk.END))
+
+    # [Continue with the rest of your existing methods - they remain the same]
+    # I'll include the key ones that need to be present:
+
+    def _populate_game_list(self):
+        """Populate the game list"""
+        self.game_listbox.delete(0, tk.END)
+        
+        if not self.games:
+            self.game_listbox.insert(tk.END, "No games found")
+            return
+        
+        for game_name in sorted(self.games.keys()):
+            self.game_listbox.insert(tk.END, game_name)
+
+    def take_quick_screenshot(self):
+        """Take a quick screenshot"""
+        if not self.screen_analyzer:
+            messagebox.showerror("Error", "Screen analyzer not initialized")
+            return
+        
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"quick_screenshot_{timestamp}"
+            
+            messagebox.showinfo("📷 Screenshot", "Click OK and switch to the window you want to capture.\nScreenshot will be taken in 3 seconds.")
+            
+            # Take screenshot after delay
+            self.root.after(3000, lambda: self._take_delayed_screenshot(filename))
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to take screenshot: {e}")
+
+    def _take_delayed_screenshot(self, filename):
+        """Take screenshot after delay"""
+        try:
+            path = self.screen_analyzer.save_screenshot(filename)
+            if path:
+                messagebox.showinfo("Success", f"📸 Screenshot saved to:\n{path}")
+                self.logger.info(f"Quick screenshot saved: {path}")
+            else:
+                messagebox.showerror("Error", "Failed to save screenshot")
+        except Exception as e:
+            messagebox.showerror("Error", f"Screenshot failed: {e}")
+
+    def _get_template_confidence(self, template_file):
+        """Get the actual confidence score for template matching"""
+        try:
+            import cv2
+            
+            # Load template
+            template = cv2.imread(template_file)
+            if template is None:
+                return 0.0
+            
+            # Capture current screen
+            screen = self.screen_analyzer.capture_screen()
+            
+            # Ensure template isn't larger than screen
+            if template.shape[0] > screen.shape[0] or template.shape[1] > screen.shape[1]:
+                return 0.0
+            
+            # Perform template matching
+            result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+            
+            return max_val
+            
+        except Exception as e:
+            self.logger.error(f"Error getting template confidence: {e}")
+            return 0.0
+
+    # Include all your other existing methods here...
+    # (capture_template, test_template, refresh_templates, etc.)
+    # For brevity, I'm not repeating them all, but they should all be included
+
+    def refresh_templates(self):
+        """Refresh the template list"""
+        self.template_listbox.delete(0, tk.END)
+        
+        templates_dir = Path("templates/screens")
+        if not templates_dir.exists():
+            self.template_listbox.insert(tk.END, "No templates directory found")
+            return
+        
+        # Find all template files
+        template_files = []
+        for game_dir in templates_dir.iterdir():
+            if game_dir.is_dir():
+                for template_file in game_dir.glob("*.png"):
+                    relative_path = template_file.relative_to(templates_dir)
+                    template_files.append(str(relative_path))
+        
+        if not template_files:
+            self.template_listbox.insert(tk.END, "No template files found")
+            return
+        
+        for template in sorted(template_files):
+            self.template_listbox.insert(tk.END, template)
+
+    def open_config_folder(self):
+        """Open the config folder"""
+        config_dir = Path("config")
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                subprocess.run(['explorer', str(config_dir.resolve())])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(['open', str(config_dir.resolve())])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(config_dir.resolve())])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open config folder: {e}")
+
+    def clear_log(self):
+        """Clear the log text widget"""
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.delete(1.0, tk.END)
+        self.log_text.config(state=tk.DISABLED)
+
+    def save_log(self):
+        """Save the current log to a file"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"katana_gui_log_{timestamp}.txt"
+            
+            filepath = filedialog.asksaveasfilename(
+                defaultextension=".txt",
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+                initialname=filename
+            )
+            
+            if filepath:
+                log_content = self.log_text.get(1.0, tk.END)
+                with open(filepath, 'w') as f:
+                    f.write(log_content)
+                messagebox.showinfo("Success", f"💾 Log saved to {filepath}")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save log: {e}")
+
+    # Add all your other existing methods here (on_game_select, test_components, 
+    # refresh_games, start_workflow, etc.) - they remain the same
+
+class LogTextHandler(logging.Handler):
+    """Handler to redirect logging output to a tkinter Text widget"""
+    
+    def __init__(self, text_widget):
+        super().__init__()
+        self.text_widget = text_widget
+        self.formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    def emit(self, record):
+        msg = self.format(record)
+        
+        def append():
+            try:
+                self.text_widget.config(state=tk.NORMAL)
+                self.text_widget.insert(tk.END, msg + '\n')
+                self.text_widget.see(tk.END)
+                self.text_widget.config(state=tk.DISABLED)
+            except tk.TclError:
+                # Widget has been destroyed
+                pass
+        
+        # Schedule the append to happen in the main thread
+        try:
+            self.text_widget.after(0, append)
+        except tk.TclError:
+            # Widget has been destroyed
+            pass
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = KatanaGUI(root)
+    root.mainloop()

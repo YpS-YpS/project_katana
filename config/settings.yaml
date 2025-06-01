@@ -1,0 +1,14 @@
+# Project Katana Global Settings
+steam_path: 'C:/Program Files (x86)/Steam'
+epic_path: 'C:/Program Files/Epic Games'
+steam_launch_options: ''
+screenshot_dir: 'output/screenshots'
+log_level: 'INFO'
+template_matching_threshold: 0.8
+input_delay: 0.5
+timeout: 300
+
+# Mouse timing settings
+mouse_move_duration: 0.6    # Default mouse movement time
+pre_click_delay: 1.0       # Default delay before clicking
+post_click_delay: 1.0       # Default delay after clicking

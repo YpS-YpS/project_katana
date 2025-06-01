@@ -1,0 +1,127 @@
+name: "CS2"
+type: "steam"
+app_id: "730"
+exe_name: "cs2.exe"
+process_name: "cs2"
+launch_options: "-novid -console fps_max 0"
+startup_time: 60
+
+workflow:
+  # ===== GAME LAUNCH =====
+  - action: "launch_game"
+  
+  - action: "wait_for_game"
+    timeout: 60
+  
+  # ===== WAIT FOR MAIN MENU =====
+  - action: "wait_for_template"
+    template: "main_menu.png"
+    timeout: 90
+  
+  - action: "take_screenshot"
+    name: "01_main_menu_loaded"
+  
+  # ===== NAVIGATE TO BENCHMARK =====
+  # Click Play button
+  - action: "wait_for_template"
+    template: "play_button.png"
+    timeout: 15
+  
+  - action: "click_template"
+    template: "play_button.png"
+    timeout: 10
+  
+  - action: "take_screenshot"
+    name: "02_after_play_click"
+  
+  # Wait for and click Workshop Maps
+  - action: "wait_for_template"
+    template: "workshop_map.png"
+    timeout: 20
+  
+  - action: "click_template"
+    template: "workshop_map.png"
+    timeout: 10
+  
+  - action: "take_screenshot"
+    name: "03_workshop_maps_page"
+  
+  # Find and click FPS Benchmark map
+  - action: "wait_for_template"
+    template: "fps_benchmark_map.png"
+    timeout: 30
+  
+  - action: "click_template"
+    template: "fps_benchmark_map.png"
+    timeout: 10
+  
+  - action: "take_screenshot"
+    name: "04_benchmark_map_selected"
+  
+  # Click GO button to start benchmark
+  - action: "wait_for_template"
+    template: "go_button.png"
+    timeout: 15
+  
+  - action: "click_template"
+    template: "go_button.png"
+    timeout: 10
+  
+  - action: "take_screenshot"
+    name: "05_benchmark_starting"
+  
+  # ===== WAIT FOR BENCHMARK TO COMPLETE =====
+  # Wait for loading to finish (you might need a loading template)
+  - action: "wait"
+    seconds: 30  # Wait for initial loading
+  
+  # Wait for benchmark to complete (adjust time as needed)
+  # You might want to add a "benchmark_running.png" template here
+  - action: "wait"
+    seconds: 180  # 3 minutes for benchmark to run
+  
+  # Take screenshot during benchmark (optional)
+  - action: "take_screenshot"
+    name: "06_benchmark_running"
+  
+  # Wait additional time for results to appear
+  - action: "wait"
+    seconds: 30
+  
+  # ===== CAPTURE RESULTS =====
+  - action: "take_screenshot"
+    name: "07_benchmark_results_final"
+  
+  # Wait to review results
+  - action: "wait"
+    seconds: 10
+  
+  # ===== EXIT BENCHMARK =====
+  # Try to return to main menu using quit button
+  - action: "click_template_if_exists"
+    template: "quit_button.png"
+    timeout: 10
+    optional: true
+  
+  # Alternative: use ESC key if quit button doesn't work
+  - action: "press_key"
+    key: "escape"
+    delay: 2
+  
+  # Wait for main menu to return (optional)
+  - action: "wait_for_template"
+    template: "main_menu.png"
+    timeout: 30
+    optional: true
+  
+  - action: "take_screenshot"
+    name: "08_workflow_complete"
+
+# Template references (for documentation)
+screens:
+  main_menu: "templates/screens/cs2/main_menu.png"
+  play_button: "templates/screens/cs2/play_button.png"
+  workshop_map: "templates/screens/cs2/workshop_map.png"
+  fps_benchmark_map: "templates/screens/cs2/fps_benchmark_map.png"
+  go_button: "templates/screens/cs2/go_button.png"
+  quit_button: "templates/screens/cs2/quit_button.png"
