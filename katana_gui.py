@@ -61,22 +61,37 @@ class KatanaGUI:
         self.root.configure(bg='#f0f0f0')
     
     def _setup_logging(self):
-        """Set up basic logging"""
+        """Set up basic logging with Unicode support"""
         try:
             log_dir = os.path.join("output", "logs")
             os.makedirs(log_dir, exist_ok=True)
             log_file = os.path.join(log_dir, f"katana_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
             
+            # Create formatters without emojis for console
+            file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            
+            # Set up file handler with UTF-8 encoding
+            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+            file_handler.setLevel(logging.INFO)
+            file_handler.setFormatter(file_formatter)
+            
+            # Set up console handler with UTF-8 encoding
+            import sys
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(logging.INFO)
+            console_handler.setFormatter(console_formatter)
+            
+            # Configure logger
             logging.basicConfig(
                 level=logging.INFO,
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                handlers=[
-                    logging.FileHandler(log_file),
-                    logging.StreamHandler()
-                ]
+                handlers=[file_handler, console_handler],
+                force=True  # Override any existing configuration
             )
+            
             self.logger = logging.getLogger(__name__)
-            self.logger.info("🗡️ Katana logging initialized")
+            self.logger.info("Katana logging initialized")
+            
         except Exception as e:
             print(f"Failed to setup logging: {e}")
             self.logger = logging.getLogger(__name__)
@@ -105,7 +120,7 @@ class KatanaGUI:
             
             # Find installed games
             self.games = self.game_finder.find_all_games()
-            self.logger.info(f"✅ Initialization successful. Found {len(self.games)} games.")
+            self.logger.info(f"Initialization successful. Found {len(self.games)} games.")
             
         except Exception as e:
             error_msg = f"Failed to initialize: {str(e)}"
@@ -119,7 +134,7 @@ class KatanaGUI:
         try:
             os.makedirs("config/games", exist_ok=True)
             os.makedirs("templates/screens", exist_ok=True)
-            self.logger.info("📁 Created config directory")
+            self.logger.info("Created config directory")
         except Exception as e:
             self.logger.error(f"Failed to create config directory: {e}")
     
@@ -142,7 +157,7 @@ class KatanaGUI:
         try:
             with open("config/settings.yaml", "w") as f:
                 yaml.dump(default_settings, f, default_flow_style=False)
-            self.logger.info("⚙️ Created default settings.yaml")
+            self.logger.info("Created default settings.yaml")
         except Exception as e:
             self.logger.error(f"Failed to create settings.yaml: {e}")
     
@@ -196,7 +211,7 @@ class KatanaGUI:
         status_frame.pack_propagate(False)
         
         self.status_var = tk.StringVar()
-        self.status_var.set("🚀 Ready" if self.games else "⚠️ No games found - Check configuration")
+        self.status_var.set("Ready" if self.games else "No games found - Check configuration")
         
         self.status_bar = tk.Label(status_frame, textvariable=self.status_var, 
                                   font=('Segoe UI', 9), fg='white', bg='#34495e', 
@@ -451,6 +466,945 @@ class KatanaGUI:
                                        font=('Consolas', 9), bg='white', fg='#2c3e50',
                                        relief=tk.FLAT, bd=1, state=tk.DISABLED)
         self.workflow_preview.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    # ==================== CORE METHODS ====================
+    
+    def _populate_game_list(self):
+        """Populate the game list"""
+        self.game_listbox.delete(0, tk.END)
+        
+        if not self.games:
+            self.game_listbox.insert(tk.END, "No games found")
+            return
+        
+        for game_name in sorted(self.games.keys()):
+            self.game_listbox.insert(tk.END, game_name)
+
+    def refresh_games(self):
+        """Refresh the list of installed games"""
+        try:
+            if self.game_finder:
+                self.games = self.game_finder.find_all_games()
+                self._populate_game_list()
+                self.status_var.set(f"Found {len(self.games)} games")
+                
+                # Clear selection details
+                self.details_text.config(state=tk.NORMAL)
+                self.details_text.delete(1.0, tk.END)
+                self.details_text.config(state=tk.DISABLED)
+                self.selected_game = None
+            else:
+                messagebox.showwarning("Warning", "Game finder not initialized")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to refresh games: {e}")
+            self.logger.error(f"Error refreshing games: {e}")
+
+    def on_game_select(self, event):
+        """Handle game selection"""
+        selection = self.game_listbox.curselection()
+        if selection and self.games:
+            game_name = self.game_listbox.get(selection[0])
+            
+            if game_name == "No games found":
+                return
+                
+            self.selected_game = self.games.get(game_name)
+            
+            if self.selected_game:
+                # Update details
+                self.details_text.config(state=tk.NORMAL)
+                self.details_text.delete(1.0, tk.END)
+                
+                details = f"Name: {game_name}\n"
+                details += f"Platform: {self.selected_game.get('platform', 'Unknown')}\n"
+                details += f"Path: {self.selected_game.get('path', 'Unknown')}\n"
+                
+                if self.selected_game.get('platform') == 'steam':
+                    details += f"Steam App ID: {self.selected_game.get('app_id', 'Unknown')}\n"
+                
+                # Check if workflow exists
+                workflow = self.selected_game.get('config', {}).get('workflow', [])
+                details += f"Workflow steps: {len(workflow)}\n"
+                
+                self.details_text.insert(tk.END, details)
+                self.details_text.config(state=tk.DISABLED)
+                
+                self.status_var.set(f"Selected {game_name}")
+
+    def test_components(self):
+        """Test that all components are working"""
+        test_results = []
+        
+        # Test 1: Configuration loading
+        try:
+            with open("config/settings.yaml", "r") as f:
+                settings = yaml.safe_load(f)
+            test_results.append("✓ Settings loaded successfully")
+        except Exception as e:
+            test_results.append(f"✗ Settings error: {e}")
+        
+        # Test 2: Component initialization
+        try:
+            if self.game_finder:
+                test_results.append("✓ Game finder initialized")
+            else:
+                test_results.append("✗ Game finder not initialized")
+                
+            if self.game_controller:
+                test_results.append("✓ Game controller initialized")
+            else:
+                test_results.append("✗ Game controller not initialized")
+                
+            if self.workflow_engine:
+                test_results.append("✓ Workflow engine initialized")
+            else:
+                test_results.append("✗ Workflow engine not initialized")
+                
+            if self.screen_analyzer:
+                test_results.append("✓ Screen analyzer initialized")
+            else:
+                test_results.append("✗ Screen analyzer not initialized")
+        except Exception as e:
+            test_results.append(f"✗ Component test error: {e}")
+        
+        # Test 3: Directory structure
+        dirs_to_check = ["config", "config/games", "output", "output/logs", "output/screenshots", "templates/screens"]
+        for dir_path in dirs_to_check:
+            if os.path.exists(dir_path):
+                test_results.append(f"✓ Directory exists: {dir_path}")
+            else:
+                test_results.append(f"✗ Directory missing: {dir_path}")
+        
+        # Test 4: Steam path
+        try:
+            steam_path = self.game_finder.settings.get('steam_path') if self.game_finder else None
+            if steam_path and os.path.exists(steam_path):
+                test_results.append(f"✓ Steam path found: {steam_path}")
+            else:
+                test_results.append(f"✗ Steam path not found: {steam_path}")
+        except Exception as e:
+            test_results.append(f"✗ Steam path test error: {e}")
+        
+        # Test 5: Game configs
+        config_dir = Path("config/games")
+        if config_dir.exists():
+            config_files = list(config_dir.glob("*.yaml"))
+            test_results.append(f"✓ Found {len(config_files)} game config(s)")
+            for config_file in config_files:
+                test_results.append(f"  - {config_file.name}")
+        else:
+            test_results.append("✗ No game configs directory")
+        
+        # Test 6: Screen capture
+        try:
+            if self.screen_analyzer:
+                screen = self.screen_analyzer.capture_screen()
+                test_results.append(f"✓ Screen capture working ({screen.shape[1]}x{screen.shape[0]})")
+            else:
+                test_results.append("✗ Screen analyzer not available")
+        except Exception as e:
+            test_results.append(f"✗ Screen capture test error: {e}")
+        
+        # Show results
+        result_msg = "\n".join(test_results)
+        messagebox.showinfo("Component Test Results", result_msg)
+        
+        # Also log to console
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.insert(tk.END, "=== Component Test Results ===\n")
+        self.log_text.insert(tk.END, result_msg + "\n\n")
+        self.log_text.see(tk.END)
+        self.log_text.config(state=tk.DISABLED)
+
+    def check_game_status(self):
+        """Check if the selected game is running"""
+        if not self.selected_game:
+            messagebox.showwarning("Warning", "Please select a game first")
+            return
+        
+        if not self.game_controller:
+            messagebox.showerror("Error", "Game controller not initialized")
+            return
+        
+        try:
+            process_name = self.selected_game['config'].get('process_name')
+            game_name = self.selected_game['config']['name']
+            
+            if self.game_controller.is_game_running(process_name):
+                messagebox.showinfo("Game Status", f"{game_name} is currently running")
+                self.status_var.set(f"{game_name} is running")
+            else:
+                messagebox.showinfo("Game Status", f"{game_name} is not running")
+                self.status_var.set(f"{game_name} is not running")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to check game status: {e}")
+
+    def start_workflow(self):
+        """Start the benchmark workflow for the selected game"""
+        if not self.selected_game:
+            messagebox.showwarning("Warning", "Please select a game first")
+            return
+        
+        if not self.workflow_engine:
+            messagebox.showerror("Error", "Workflow engine not initialized")
+            return
+        
+        # Check if workflow exists
+        if not self.selected_game['config'].get('workflow'):
+            messagebox.showwarning("Warning", f"No workflow defined for {self.selected_game['config']['name']}")
+            return
+        
+        # Disable buttons during workflow
+        self.start_button.config(state=tk.DISABLED)
+        self.launch_button.config(state=tk.DISABLED)
+        self.close_button.config(state=tk.DISABLED)
+        self.stop_button.config(state=tk.NORMAL)
+        
+        # Clear log
+        self.clear_log()
+        
+        # Add a handler to update the log text widget with workflow logs
+        self.log_handler = LogTextHandler(self.log_text)
+        self.log_handler.setLevel(logging.INFO)
+        logging.getLogger().addHandler(self.log_handler)
+        
+        # Start workflow in a separate thread
+        self.workflow_thread = threading.Thread(target=self._run_workflow)
+        self.workflow_thread.daemon = True
+        self.workflow_thread.start()
+
+    def _run_workflow(self):
+        """Run the workflow in a separate thread"""
+        try:
+            game_name = self.selected_game['config']['name']
+            self.root.after(0, lambda: self.status_var.set(f"Running workflow for {game_name}..."))
+            
+            # Run the workflow
+            success = self.workflow_engine.run_workflow(self.selected_game)
+            
+            if success:
+                self.root.after(0, lambda: self.status_var.set(f"Workflow completed successfully for {game_name}"))
+                self.logger.info(f"Workflow completed successfully for {game_name}")
+                self.root.after(0, lambda: messagebox.showinfo("Success", f"Workflow completed successfully for {game_name}"))
+            else:
+                self.root.after(0, lambda: self.status_var.set(f"Workflow failed for {game_name}"))
+                self.logger.error(f"Workflow failed for {game_name}")
+                self.root.after(0, lambda: messagebox.showerror("Workflow Failed", f"Workflow failed for {game_name}. Check the log for details."))
+        
+        except Exception as e:
+            self.root.after(0, lambda: self.status_var.set("Error running workflow"))
+            self.logger.error(f"Error running workflow: {str(e)}")
+            self.root.after(0, lambda: messagebox.showerror("Workflow Error", str(e)))
+        
+        finally:
+            # Re-enable buttons
+            self.root.after(0, lambda: self.start_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.launch_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.close_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.stop_button.config(state=tk.DISABLED))
+            
+            # Remove the log handler
+            if hasattr(self, 'log_handler'):
+                logging.getLogger().removeHandler(self.log_handler)
+
+    def stop_workflow(self):
+        """Stop the currently running workflow"""
+        if self.workflow_engine:
+            self.workflow_engine.stop_workflow()
+            self.logger.info("Workflow stop requested")
+            self.status_var.set("Stopping workflow...")
+
+    def launch_game(self):
+        """Launch the selected game without running the workflow"""
+        if not self.selected_game:
+            messagebox.showwarning("Warning", "Please select a game first")
+            return
+        
+        if not self.game_controller:
+            messagebox.showerror("Error", "Game controller not initialized")
+            return
+        
+        # Check if game is already running
+        process_name = self.selected_game['config'].get('process_name')
+        if self.game_controller.is_game_running(process_name):
+            messagebox.showinfo("Info", f"{self.selected_game['config']['name']} is already running")
+            return
+        
+        # Clear log and setup logging
+        self.clear_log()
+        self.log_handler = LogTextHandler(self.log_text)
+        self.log_handler.setLevel(logging.INFO)
+        logging.getLogger().addHandler(self.log_handler)
+        
+        # Launch the game in a separate thread
+        threading.Thread(target=self._launch_game_thread, daemon=True).start()
+
+    def _launch_game_thread(self):
+        """Launch game in a separate thread"""
+        try:
+            game_name = self.selected_game['config']['name']
+            self.root.after(0, lambda: self.status_var.set(f"Launching {game_name}..."))
+            
+            # Disable launch button
+            self.root.after(0, lambda: self.launch_button.config(state=tk.DISABLED))
+            
+            # Launch the game
+            process = self.game_controller.launch_game(self.selected_game)
+            
+            if process:
+                self.logger.info(f"Game launch initiated: {game_name}")
+                
+                # Wait a bit to see if the game starts
+                process_name = self.selected_game['config'].get('process_name')
+                startup_time = self.selected_game['config'].get('startup_time', 30)
+                
+                self.logger.info(f"Waiting up to {startup_time} seconds for {game_name} to start...")
+                
+                if self.game_controller.wait_for_game_to_start(startup_time, process_name):
+                    self.root.after(0, lambda: self.status_var.set(f"{game_name} launched successfully"))
+                    self.root.after(0, lambda: messagebox.showinfo("Success", f"{game_name} launched successfully!"))
+                else:
+                    self.root.after(0, lambda: self.status_var.set(f"{game_name} launch may have failed"))
+                    self.root.after(0, lambda: messagebox.showwarning("Warning", f"{game_name} was launched but the process wasn't detected. Check if the game is running."))
+            else:
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to launch {game_name}"))
+                
+        except Exception as e:
+            error_msg = f"Error launching game: {str(e)}"
+            self.logger.error(error_msg)
+            self.root.after(0, lambda: messagebox.showerror("Launch Error", error_msg))
+            self.root.after(0, lambda: self.status_var.set("Launch failed"))
+        
+        finally:
+            # Re-enable launch button
+            self.root.after(0, lambda: self.launch_button.config(state=tk.NORMAL))
+            
+            # Remove the log handler
+            if hasattr(self, 'log_handler'):
+                logging.getLogger().removeHandler(self.log_handler)
+
+    def close_game(self):
+        """Close the selected game"""
+        if not self.selected_game:
+            messagebox.showwarning("Warning", "Please select a game first")
+            return
+        
+        if not self.game_controller:
+            messagebox.showerror("Error", "Game controller not initialized")
+            return
+        
+        # Check if game is running
+        process_name = self.selected_game['config'].get('process_name')
+        if not self.game_controller.is_game_running(process_name):
+            messagebox.showinfo("Info", f"{self.selected_game['config']['name']} is not running")
+            return
+        
+        # Ask for confirmation
+        game_name = self.selected_game['config']['name']
+        if not messagebox.askyesno("Confirm", f"Are you sure you want to close {game_name}?"):
+            return
+        
+        # Clear log and setup logging
+        self.clear_log()
+        self.log_handler = LogTextHandler(self.log_text)
+        self.log_handler.setLevel(logging.INFO)
+        logging.getLogger().addHandler(self.log_handler)
+        
+        # Close the game in a separate thread
+        threading.Thread(target=self._close_game_thread, daemon=True).start()
+
+    def _close_game_thread(self):
+        """Close game in a separate thread"""
+        try:
+            game_name = self.selected_game['config']['name']
+            process_name = self.selected_game['config'].get('process_name')
+            
+            self.root.after(0, lambda: self.status_var.set(f"Closing {game_name}..."))
+            self.root.after(0, lambda: self.close_button.config(state=tk.DISABLED))
+            
+            # Try graceful close first
+            success = self.game_controller.close_game(process_name, force=False)
+            
+            if success:
+                self.logger.info(f"Close signal sent to {game_name}")
+                
+                # Wait for the game to close
+                if self.game_controller.wait_for_game_to_close(30, process_name):
+                    self.root.after(0, lambda: self.status_var.set(f"{game_name} closed successfully"))
+                    self.root.after(0, lambda: messagebox.showinfo("Success", f"{game_name} closed successfully"))
+                else:
+                    # If graceful close didn't work, try force close
+                    self.logger.warning(f"Graceful close failed, trying force close for {game_name}")
+                    force_success = self.game_controller.close_game(process_name, force=True)
+                    
+                    if force_success:
+                        self.root.after(0, lambda: self.status_var.set(f"{game_name} force closed"))
+                        self.root.after(0, lambda: messagebox.showinfo("Success", f"{game_name} was force closed"))
+                    else:
+                        self.root.after(0, lambda: self.status_var.set(f"Failed to close {game_name}"))
+                        self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to close {game_name}. You may need to close it manually."))
+            else:
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Could not find running process for {game_name}"))
+                
+        except Exception as e:
+            error_msg = f"Error closing game: {str(e)}"
+            self.logger.error(error_msg)
+            self.root.after(0, lambda: messagebox.showerror("Close Error", error_msg))
+            self.root.after(0, lambda: self.status_var.set("Close failed"))
+        
+        finally:
+            # Re-enable close button
+            self.root.after(0, lambda: self.close_button.config(state=tk.NORMAL))
+            
+            # Remove the log handler
+            if hasattr(self, 'log_handler'):
+                logging.getLogger().removeHandler(self.log_handler)
+
+    # ==================== TEMPLATE METHODS ====================
+
+    def take_quick_screenshot(self):
+        """Take a quick screenshot"""
+        if not self.screen_analyzer:
+            messagebox.showerror("Error", "Screen analyzer not initialized")
+            return
+        
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"quick_screenshot_{timestamp}"
+            
+            messagebox.showinfo("Screenshot", "Click OK and switch to the window you want to capture.\nScreenshot will be taken in 3 seconds.")
+            
+            # Take screenshot after delay
+            self.root.after(3000, lambda: self._take_delayed_screenshot(filename))
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to take screenshot: {e}")
+
+    def _take_delayed_screenshot(self, filename):
+        """Take screenshot after delay"""
+        try:
+            path = self.screen_analyzer.save_screenshot(filename)
+            if path:
+                messagebox.showinfo("Success", f"Screenshot saved to:\n{path}")
+                self.logger.info(f"Quick screenshot saved: {path}")
+            else:
+                messagebox.showerror("Error", "Failed to save screenshot")
+        except Exception as e:
+            messagebox.showerror("Error", f"Screenshot failed: {e}")
+
+    def capture_template(self):
+        """Capture a template with name and game association"""
+        if not self.screen_analyzer:
+            messagebox.showerror("Error", "Screen analyzer not initialized")
+            return
+        
+        # Get template name
+        template_name = simpledialog.askstring("Template Name", "Enter template name (e.g., 'play_button'):")
+        if not template_name:
+            return
+        
+        # Get game name
+        game_names = list(self.games.keys()) + ["general"]
+        game_name = self._show_choice_dialog("Select Game", "Choose which game this template is for:", game_names)
+        if not game_name:
+            return
+        
+        try:
+            # Create game-specific template directory
+            template_dir = Path("templates/screens") / game_name.lower().replace(" ", "_")
+            template_dir.mkdir(parents=True, exist_ok=True)
+            
+            messagebox.showinfo("Capture Template", 
+                               f"Click OK and switch to your game.\n"
+                               f"Position the UI element you want to capture.\n"
+                               f"Screenshot will be taken in 5 seconds.")
+            
+            # Take screenshot after delay
+            template_path = template_dir / f"{template_name}.png"
+            self.root.after(5000, lambda: self._capture_template_delayed(template_path, template_name))
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to capture template: {e}")
+
+    def _capture_template_delayed(self, template_path, template_name):
+        """Capture template after delay"""
+        try:
+            # Take full screenshot first
+            screen = self.screen_analyzer.capture_screen()
+            
+            # Save the screenshot
+            import cv2
+            success = cv2.imwrite(str(template_path), screen)
+            
+            if success:
+                messagebox.showinfo("Success", 
+                                   f"Template '{template_name}' captured!\n"
+                                   f"Saved to: {template_path}\n\n"
+                                   f"Note: You may need to crop this image to just the UI element you want to match.")
+                self.logger.info(f"Template captured: {template_path}")
+                self.refresh_templates()
+            else:
+                messagebox.showerror("Error", "Failed to save template")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Template capture failed: {e}")
+
+    def test_template(self):
+        """Test a template against current screen with game switching"""
+        if not self.screen_analyzer:
+            messagebox.showerror("Error", "Screen analyzer not initialized")
+            return
+        
+        # Get template file
+        template_file = filedialog.askopenfilename(
+            title="Select Template to Test",
+            initialdir="templates/screens",
+            filetypes=[("PNG files", "*.png"), ("All files", "*.*")]
+        )
+        
+        if not template_file:
+            return
+        
+        # Ask if user wants to switch to game window
+        switch_to_game = messagebox.askyesno(
+            "Switch to Game?", 
+            "Do you want to automatically switch to the game window?\n\n"
+            "Click 'Yes' to use Alt+Tab with 5 second delay\n"
+            "Click 'No' to test current screen immediately"
+        )
+        
+        if switch_to_game:
+            self._test_template_with_switch(template_file)
+        else:
+            self._test_template_immediate(template_file)
+
+    def _test_template_with_switch(self, template_file):
+        """Test template with Alt+Tab switch and delay"""
+        try:
+            # Show countdown dialog
+            countdown_dialog = self._show_countdown_dialog()
+            
+            # Start the switching process in a thread
+            threading.Thread(
+                target=self._template_test_with_switch_thread, 
+                args=(template_file, countdown_dialog), 
+                daemon=True
+            ).start()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Template test failed: {e}")
+
+    def _template_test_with_switch_thread(self, template_file, countdown_dialog):
+        """Run template test with Alt+Tab in separate thread"""
+        try:
+            # Wait 2 seconds, then Alt+Tab
+            time.sleep(2)
+            
+            # Update countdown
+            self.root.after(0, lambda: self._update_countdown(countdown_dialog, "Switching to game..."))
+            
+            # Simulate Alt+Tab to switch to game
+            import pyautogui
+            pyautogui.hotkey('alt', 'tab')
+            
+            # Wait 3 more seconds for game to come to foreground
+            for i in range(3, 0, -1):
+                self.root.after(0, lambda i=i: self._update_countdown(countdown_dialog, f"Testing in {i} seconds..."))
+                time.sleep(1)
+            
+            # Close countdown dialog
+            self.root.after(0, lambda: countdown_dialog.destroy())
+            
+            # Now test the template
+            self.root.after(0, lambda: self._test_template_immediate(template_file))
+            
+        except Exception as e:
+            self.root.after(0, lambda: countdown_dialog.destroy())
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Template test failed: {e}"))
+
+    def _show_countdown_dialog(self):
+        """Show countdown dialog during template test"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Template Test in Progress")
+        dialog.geometry("300x150")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 100, self.root.winfo_rooty() + 100))
+        
+        # Make it stay on top
+        dialog.attributes('-topmost', True)
+        
+        # Add content
+        dialog.label = ttk.Label(dialog, text="Preparing to test template...", font=("Arial", 12))
+        dialog.label.pack(expand=True)
+        
+        # Add cancel button
+        def cancel_test():
+            dialog.destroy()
+        
+        ttk.Button(dialog, text="Cancel", command=cancel_test).pack(pady=10)
+        
+        return dialog
+
+    def _update_countdown(self, dialog, message):
+        """Update countdown dialog message"""
+        try:
+            if dialog.winfo_exists():
+                dialog.label.config(text=message)
+        except tk.TclError:
+            # Dialog was destroyed
+            pass
+
+    def _test_template_immediate(self, template_file):
+        """Test template against current screen immediately"""
+        try:
+            # Get threshold from settings
+            threshold = 0.8
+            if hasattr(self, 'screen_analyzer') and hasattr(self.screen_analyzer, 'threshold'):
+                threshold = self.screen_analyzer.threshold
+            
+            # Test the template with lower thresholds for detailed analysis
+            results = []
+            thresholds_to_try = [0.9, 0.8, 0.7, 0.6, 0.5]
+            
+            for test_threshold in thresholds_to_try:
+                matched, location = self.screen_analyzer.match_template(
+                    template_file, 
+                    threshold=test_threshold
+                )
+                
+                if matched:
+                    # Get the actual confidence score
+                    confidence = self._get_template_confidence(template_file)
+                    results.append({
+                        'threshold': test_threshold,
+                        'matched': True,
+                        'location': location,
+                        'confidence': confidence
+                    })
+                    break  # Found match, no need to try lower thresholds
+                else:
+                    # Get confidence even if no match
+                    confidence = self._get_template_confidence(template_file)
+                    results.append({
+                        'threshold': test_threshold,
+                        'matched': False,
+                        'location': None,
+                        'confidence': confidence
+                    })
+            
+            # Show comprehensive results
+            self._show_template_test_results(template_file, results)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Template test failed: {e}")
+
+    def _get_template_confidence(self, template_file):
+        """Get the actual confidence score for template matching"""
+        try:
+            import cv2
+            
+            # Load template
+            template = cv2.imread(template_file)
+            if template is None:
+                return 0.0
+            
+            # Capture current screen
+            screen = self.screen_analyzer.capture_screen()
+            
+            # Ensure template isn't larger than screen
+            if template.shape[0] > screen.shape[0] or template.shape[1] > screen.shape[1]:
+                return 0.0
+            
+            # Perform template matching
+            result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+            
+            return max_val
+            
+        except Exception as e:
+            self.logger.error(f"Error getting template confidence: {e}")
+            return 0.0
+
+    def _show_template_test_results(self, template_file, results):
+        """Show detailed template test results"""
+        template_name = Path(template_file).name
+        
+        # Find the best result
+        best_result = max(results, key=lambda x: x['confidence'])
+        
+        # Create results dialog
+        results_dialog = tk.Toplevel(self.root)
+        results_dialog.title("Template Test Results")
+        results_dialog.geometry("500x400")
+        results_dialog.transient(self.root)
+        
+        # Center the dialog
+        results_dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 50, self.root.winfo_rooty() + 50))
+        
+        # Main frame
+        main_frame = ttk.Frame(results_dialog, padding=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        title_label = ttk.Label(main_frame, text=f"Template: {template_name}", font=("Arial", 14, "bold"))
+        title_label.pack(pady=(0, 10))
+        
+        # Best result summary
+        summary_frame = ttk.LabelFrame(main_frame, text="Best Match Result", padding=10)
+        summary_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        confidence = best_result['confidence']
+        confidence_percent = confidence * 100
+        
+        if best_result['matched']:
+            x, y = best_result['location']
+            status_text = f"✅ MATCH FOUND"
+            status_color = "green"
+            details_text = f"Location: ({x}, {y})\nConfidence: {confidence_percent:.1f}%"
+        else:
+            status_text = f"❌ NO MATCH"
+            status_color = "red"
+            details_text = f"Best confidence: {confidence_percent:.1f}%\nThreshold needed: {confidence:.2f}"
+        
+        status_label = ttk.Label(summary_frame, text=status_text, font=("Arial", 12, "bold"))
+        status_label.pack()
+        
+        details_label = ttk.Label(summary_frame, text=details_text, font=("Arial", 10))
+        details_label.pack(pady=(5, 0))
+        
+        # Confidence interpretation
+        interpretation_frame = ttk.LabelFrame(main_frame, text="Confidence Analysis", padding=10)
+        interpretation_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        if confidence_percent >= 90:
+            interp_text = "🟢 Excellent match - Template should work reliably"
+            interp_color = "green"
+        elif confidence_percent >= 80:
+            interp_text = "🟡 Good match - Template should work in most cases"
+            interp_color = "orange"
+        elif confidence_percent >= 70:
+            interp_text = "🟠 Fair match - May work but could be unreliable"
+            interp_color = "orange"
+        elif confidence_percent >= 60:
+            interp_text = "🔴 Poor match - Template needs improvement"
+            interp_color = "red"
+        else:
+            interp_text = "⛔ Very poor match - Template likely won't work"
+            interp_color = "red"
+        
+        interp_label = ttk.Label(interpretation_frame, text=interp_text, font=("Arial", 10))
+        interp_label.pack()
+        
+        # Detailed results
+        details_frame = ttk.LabelFrame(main_frame, text="Detailed Results", padding=10)
+        details_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # Create treeview for detailed results
+        columns = ("Threshold", "Match", "Confidence")
+        tree = ttk.Treeview(details_frame, columns=columns, show="headings", height=6)
+        
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, width=100, anchor=tk.CENTER)
+        
+        # Add results to tree
+        for result in results:
+            match_text = "✅ Yes" if result['matched'] else "❌ No"
+            confidence_text = f"{result['confidence']*100:.1f}%"
+            threshold_text = f"{result['threshold']*100:.0f}%"
+            
+            tree.insert("", tk.END, values=(threshold_text, match_text, confidence_text))
+        
+        tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Scrollbar for tree
+        tree_scroll = ttk.Scrollbar(details_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.configure(yscrollcommand=tree_scroll.set)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        def take_reference_screenshot():
+            """Take a screenshot for comparison"""
+            try:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"template_test_reference_{timestamp}"
+                path = self.screen_analyzer.save_screenshot(filename)
+                if path:
+                    messagebox.showinfo("Screenshot Saved", f"Reference screenshot saved:\n{path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save screenshot: {e}")
+        
+        def close_dialog():
+            results_dialog.destroy()
+        
+        ttk.Button(button_frame, text="Take Reference Screenshot", command=take_reference_screenshot).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Close", command=close_dialog).pack(side=tk.RIGHT, padx=5)
+
+    def refresh_templates(self):
+        """Refresh the template list"""
+        self.template_listbox.delete(0, tk.END)
+        
+        templates_dir = Path("templates/screens")
+        if not templates_dir.exists():
+            self.template_listbox.insert(tk.END, "No templates directory found")
+            return
+        
+        # Find all template files
+        template_files = []
+        for game_dir in templates_dir.iterdir():
+            if game_dir.is_dir():
+                for template_file in game_dir.glob("*.png"):
+                    relative_path = template_file.relative_to(templates_dir)
+                    template_files.append(str(relative_path))
+        
+        if not template_files:
+            self.template_listbox.insert(tk.END, "No template files found")
+            return
+        
+        for template in sorted(template_files):
+            self.template_listbox.insert(tk.END, template)
+
+    def open_templates_folder(self):
+        """Open the templates folder in file explorer"""
+        templates_dir = Path("templates/screens")
+        templates_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                subprocess.run(['explorer', str(templates_dir.resolve())])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(['open', str(templates_dir.resolve())])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(templates_dir.resolve())])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open templates folder: {e}")
+
+    def view_template(self):
+        """View the selected template"""
+        selection = self.template_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("Warning", "Please select a template to view")
+            return
+        
+        template_name = self.template_listbox.get(selection[0])
+        if template_name in ["No templates directory found", "No template files found"]:
+            return
+        
+        template_path = Path("templates/screens") / template_name
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                subprocess.run(['start', str(template_path.resolve())], shell=True)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(['open', str(template_path.resolve())])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(template_path.resolve())])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open template: {e}")
+
+    def open_config_folder(self):
+        """Open the config folder"""
+        config_dir = Path("config")
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                subprocess.run(['explorer', str(config_dir.resolve())])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(['open', str(config_dir.resolve())])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(config_dir.resolve())])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open config folder: {e}")
+
+    def _show_choice_dialog(self, title, message, choices):
+        """Show a dialog with multiple choices"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.geometry("300x200")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 50, self.root.winfo_rooty() + 50))
+        
+        result = [None]  # Use list to store result from closure
+        
+        ttk.Label(dialog, text=message).pack(pady=10)
+        
+        # Create listbox for choices
+        listbox = tk.Listbox(dialog, height=6)
+        listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        for choice in choices:
+            listbox.insert(tk.END, choice)
+        
+        def on_ok():
+            selection = listbox.curselection()
+            if selection:
+                result[0] = choices[selection[0]]
+            dialog.destroy()
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=10)
+        
+        ttk.Button(button_frame, text="OK", command=on_ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side=tk.LEFT, padx=5)
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        
+        return result[0]
+
+    def clear_log(self):
+        """Clear the log text widget"""
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.delete(1.0, tk.END)
+        self.log_text.config(state=tk.DISABLED)
+
+    def save_log(self):
+        """Save the current log to a file"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"katana_gui_log_{timestamp}.txt"
+            
+            filepath = filedialog.asksaveasfilename(
+                defaultextension=".txt",
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+                initialname=filename
+            )
+            
+            if filepath:
+                log_content = self.log_text.get(1.0, tk.END)
+                with open(filepath, 'w') as f:
+                    f.write(log_content)
+                messagebox.showinfo("Success", f"Log saved to {filepath}")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save log: {e}")
+
+    # ==================== MONITORING METHODS ====================
     
     def monitor_template(self):
         """Monitor a template continuously with real-time confidence updates"""
@@ -832,153 +1786,6 @@ class KatanaGUI:
             self.root.after(0, lambda t=timestamp: log_text.insert(tk.END, f"❌ {t} - Monitoring failed: {str(e)}\n"))
             self.root.after(0, lambda: log_text.see(tk.END))
 
-    # [Continue with the rest of your existing methods - they remain the same]
-    # I'll include the key ones that need to be present:
-
-    def _populate_game_list(self):
-        """Populate the game list"""
-        self.game_listbox.delete(0, tk.END)
-        
-        if not self.games:
-            self.game_listbox.insert(tk.END, "No games found")
-            return
-        
-        for game_name in sorted(self.games.keys()):
-            self.game_listbox.insert(tk.END, game_name)
-
-    def take_quick_screenshot(self):
-        """Take a quick screenshot"""
-        if not self.screen_analyzer:
-            messagebox.showerror("Error", "Screen analyzer not initialized")
-            return
-        
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"quick_screenshot_{timestamp}"
-            
-            messagebox.showinfo("📷 Screenshot", "Click OK and switch to the window you want to capture.\nScreenshot will be taken in 3 seconds.")
-            
-            # Take screenshot after delay
-            self.root.after(3000, lambda: self._take_delayed_screenshot(filename))
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to take screenshot: {e}")
-
-    def _take_delayed_screenshot(self, filename):
-        """Take screenshot after delay"""
-        try:
-            path = self.screen_analyzer.save_screenshot(filename)
-            if path:
-                messagebox.showinfo("Success", f"📸 Screenshot saved to:\n{path}")
-                self.logger.info(f"Quick screenshot saved: {path}")
-            else:
-                messagebox.showerror("Error", "Failed to save screenshot")
-        except Exception as e:
-            messagebox.showerror("Error", f"Screenshot failed: {e}")
-
-    def _get_template_confidence(self, template_file):
-        """Get the actual confidence score for template matching"""
-        try:
-            import cv2
-            
-            # Load template
-            template = cv2.imread(template_file)
-            if template is None:
-                return 0.0
-            
-            # Capture current screen
-            screen = self.screen_analyzer.capture_screen()
-            
-            # Ensure template isn't larger than screen
-            if template.shape[0] > screen.shape[0] or template.shape[1] > screen.shape[1]:
-                return 0.0
-            
-            # Perform template matching
-            result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-            
-            return max_val
-            
-        except Exception as e:
-            self.logger.error(f"Error getting template confidence: {e}")
-            return 0.0
-
-    # Include all your other existing methods here...
-    # (capture_template, test_template, refresh_templates, etc.)
-    # For brevity, I'm not repeating them all, but they should all be included
-
-    def refresh_templates(self):
-        """Refresh the template list"""
-        self.template_listbox.delete(0, tk.END)
-        
-        templates_dir = Path("templates/screens")
-        if not templates_dir.exists():
-            self.template_listbox.insert(tk.END, "No templates directory found")
-            return
-        
-        # Find all template files
-        template_files = []
-        for game_dir in templates_dir.iterdir():
-            if game_dir.is_dir():
-                for template_file in game_dir.glob("*.png"):
-                    relative_path = template_file.relative_to(templates_dir)
-                    template_files.append(str(relative_path))
-        
-        if not template_files:
-            self.template_listbox.insert(tk.END, "No template files found")
-            return
-        
-        for template in sorted(template_files):
-            self.template_listbox.insert(tk.END, template)
-
-    def open_config_folder(self):
-        """Open the config folder"""
-        config_dir = Path("config")
-        config_dir.mkdir(parents=True, exist_ok=True)
-        
-        try:
-            import subprocess
-            import platform
-            
-            if platform.system() == "Windows":
-                subprocess.run(['explorer', str(config_dir.resolve())])
-            elif platform.system() == "Darwin":  # macOS
-                subprocess.run(['open', str(config_dir.resolve())])
-            else:  # Linux
-                subprocess.run(['xdg-open', str(config_dir.resolve())])
-                
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to open config folder: {e}")
-
-    def clear_log(self):
-        """Clear the log text widget"""
-        self.log_text.config(state=tk.NORMAL)
-        self.log_text.delete(1.0, tk.END)
-        self.log_text.config(state=tk.DISABLED)
-
-    def save_log(self):
-        """Save the current log to a file"""
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"katana_gui_log_{timestamp}.txt"
-            
-            filepath = filedialog.asksaveasfilename(
-                defaultextension=".txt",
-                filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-                initialname=filename
-            )
-            
-            if filepath:
-                log_content = self.log_text.get(1.0, tk.END)
-                with open(filepath, 'w') as f:
-                    f.write(log_content)
-                messagebox.showinfo("Success", f"💾 Log saved to {filepath}")
-                
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save log: {e}")
-
-    # Add all your other existing methods here (on_game_select, test_components, 
-    # refresh_games, start_workflow, etc.) - they remain the same
 
 class LogTextHandler(logging.Handler):
     """Handler to redirect logging output to a tkinter Text widget"""
