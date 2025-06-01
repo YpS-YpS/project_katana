@@ -22,7 +22,6 @@ workflow:
     name: "01_main_menu_loaded"
   
   # ===== NAVIGATE TO BENCHMARK =====
-  # Click Play button
   - action: "wait_for_template"
     template: "play_button.png"
     timeout: 15
@@ -34,7 +33,6 @@ workflow:
   - action: "take_screenshot"
     name: "02_after_play_click"
   
-  # Wait for and click Workshop Maps
   - action: "wait_for_template"
     template: "workshop_map.png"
     timeout: 20
@@ -46,7 +44,6 @@ workflow:
   - action: "take_screenshot"
     name: "03_workshop_maps_page"
   
-  # Find and click FPS Benchmark map
   - action: "wait_for_template"
     template: "fps_benchmark_map.png"
     timeout: 30
@@ -58,7 +55,6 @@ workflow:
   - action: "take_screenshot"
     name: "04_benchmark_map_selected"
   
-  # Click GO button to start benchmark
   - action: "wait_for_template"
     template: "go_button.png"
     timeout: 15
@@ -70,52 +66,63 @@ workflow:
   - action: "take_screenshot"
     name: "05_benchmark_starting"
   
-  # ===== WAIT FOR BENCHMARK TO COMPLETE =====
-  # Wait for loading to finish (you might need a loading template)
-  - action: "wait"
-    seconds: 30  # Wait for initial loading
+  # ===== WAIT FOR ACTUAL BENCHMARK START =====
+  # Wait for loading screen to finish and benchmark to actually begin
+  - action: "wait_for_template"
+    template: "benchmark_start.png"
+    timeout: 120
+    threshold: 0.7  # Lower threshold if needed
   
-  # Wait for benchmark to complete (adjust time as needed)
-  # You might want to add a "benchmark_running.png" template here
-  - action: "wait"
-    seconds: 180  # 3 minutes for benchmark to run
-  
-  # Take screenshot during benchmark (optional)
   - action: "take_screenshot"
-    name: "06_benchmark_running"
+    name: "06_benchmark_start_detected"
   
-  # Wait additional time for results to appear
-  - action: "wait"
-    seconds: 30
+  # Mark benchmark start time (workflow engine will log timestamp)
+  - action: "log_message"
+    message: "BENCHMARK_START_TIME"
   
-  # ===== CAPTURE RESULTS =====
+  # ===== WAIT FOR BENCHMARK COMPLETION =====
+  # Wait for benchmark to complete (detect end screen/results)
+  - action: "wait_for_template"
+    template: "benchmark_end.png" 
+    timeout: 300  # Max 5 minutes for benchmark
+    threshold: 0.7
+  
+  # Mark benchmark end time
+  - action: "log_message"
+    message: "BENCHMARK_END_TIME"
+  
   - action: "take_screenshot"
-    name: "07_benchmark_results_final"
+    name: "07_benchmark_end_detected"
+  
+  # Wait for results to stabilize
+  - action: "wait"
+    seconds: 5
+  
+  # ===== CAPTURE FINAL RESULTS =====
+  - action: "take_screenshot"
+    name: "08_benchmark_results_final"
   
   # Wait to review results
   - action: "wait"
     seconds: 10
   
   # ===== EXIT BENCHMARK =====
-  # Try to return to main menu using quit button
   - action: "click_template_if_exists"
     template: "quit_button.png"
     timeout: 10
     optional: true
   
-  # Alternative: use ESC key if quit button doesn't work
   - action: "press_key"
     key: "escape"
     delay: 2
   
-  # Wait for main menu to return (optional)
   - action: "wait_for_template"
     template: "main_menu.png"
     timeout: 30
     optional: true
   
   - action: "take_screenshot"
-    name: "08_workflow_complete"
+    name: "09_workflow_complete"
 
 # Template references (for documentation)
 screens:
@@ -124,4 +131,6 @@ screens:
   workshop_map: "templates/screens/cs2/workshop_map.png"
   fps_benchmark_map: "templates/screens/cs2/fps_benchmark_map.png"
   go_button: "templates/screens/cs2/go_button.png"
+  benchmark_start: "templates/screens/cs2/benchmark_start.png"    # NEW: Actual benchmark running
+  benchmark_end: "templates/screens/cs2/benchmark_end.png"        # NEW: Benchmark complete/results
   quit_button: "templates/screens/cs2/quit_button.png"
