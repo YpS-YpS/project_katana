@@ -1434,7 +1434,7 @@ class KatanaGUI:
         """Get monitoring parameters from user with modern styling"""
         dialog = tk.Toplevel(self.root)
         dialog.title("👁️ Template Monitoring Settings")
-        dialog.geometry("450x400")
+        dialog.geometry("600x600")
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.configure(bg='#ecf0f1')

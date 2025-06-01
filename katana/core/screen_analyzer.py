@@ -191,13 +191,23 @@ class ScreenAnalyzer:
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
         
         if max_val >= threshold:
-            # Calculate the center point of the match
+            # Calculate the center point of the match (LOCAL coordinates)
             match_h, match_w = template.shape[:2]
-            center_x = max_loc[0] + match_w // 2
-            center_y = max_loc[1] + match_h // 2
+            local_x = max_loc[0] + match_w // 2
+            local_y = max_loc[1] + match_h // 2
             
-            logger.debug(f"Template matched: {template_path} (confidence: {max_val:.2f})")
-            return True, (center_x, center_y)
+            # Convert to GLOBAL screen coordinates
+            game_process = getattr(self, 'current_game_process', None)
+            monitor_index = self._get_game_monitor(game_process)
+            
+            import mss
+            with mss.mss() as sct:
+                monitor = sct.monitors[monitor_index]
+                global_x = local_x + monitor['left']
+                global_y = local_y + monitor['top']
+            
+            logger.debug(f"Template matched: {template_path} at global ({global_x}, {global_y}) confidence: {max_val:.2f}")
+            return True, (global_x, global_y)
         else:
             logger.debug(f"Template not matched: {template_path} (confidence: {max_val:.2f})")
             return False, None
@@ -211,6 +221,8 @@ class ScreenAnalyzer:
         
         start_time = time.time()
         while time.time() - start_time < timeout:
+            if hasattr(self, 'workflow_engine') and not self.workflow_engine.workflow_running:
+                return False, None
             try:
                 matched, location = self.match_template(template_path, region=region, threshold=threshold)
                 if matched:

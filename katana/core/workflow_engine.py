@@ -23,17 +23,22 @@ class WorkflowEngine:
         self.game_controller = GameController(settings_path)
         self.input_simulator = InputSimulator(settings_path)
         self.screen_analyzer = ScreenAnalyzer(settings_path)
+        self.screen_analyzer.workflow_engine = self
         
         self.current_game = None
         self.default_timeout = self.settings.get('timeout', 300)
         self.workflow_running = False
         self.workflow_results = []
+        
+        # Timing tracking for benchmarks
+        self.timing_markers = {}
     
     def run_workflow(self, game_config):
         """Run a workflow for the specified game"""
         self.current_game = game_config
         self.workflow_running = True
         self.workflow_results = []
+        self.timing_markers = {}  # Reset timing markers
         
         workflow = game_config['config'].get('workflow', [])
         
@@ -81,6 +86,9 @@ class WorkflowEngine:
                     logger.debug(f"Step delay: {step_delay}s")
                     time.sleep(step_delay)
             
+            # Log final timing summary if we have timing markers
+            self._log_timing_summary()
+            
             logger.info(f"Workflow completed successfully for {game_config['config']['name']}")
             return True
             
@@ -100,7 +108,8 @@ class WorkflowEngine:
         return {
             'running': self.workflow_running,
             'current_game': self.current_game['config']['name'] if self.current_game else None,
-            'results': self.workflow_results
+            'results': self.workflow_results,
+            'timing_markers': self.timing_markers
         }
     
     def _execute_step(self, step, game_config):
@@ -159,6 +168,9 @@ class WorkflowEngine:
             
             elif action == 'retry_action':
                 return self._action_retry(step, game_config)
+            
+            elif action == 'log_message':
+                return self._action_log_message(step, game_config)
             
             else:
                 logger.error(f"Unknown action: {action}")
@@ -510,6 +522,58 @@ class WorkflowEngine:
         logger.error(f"Action failed after {max_retries + 1} attempts: {sub_action['action']}")
         return False
     
+    def _action_log_message(self, step, game_config):
+        """Log a message with timestamp for timing measurement"""
+        message = step.get('message', 'LOG_MESSAGE')
+        timestamp = time.time()
+        
+        # Store timing marker for later analysis
+        self.timing_markers[message] = timestamp
+        
+        # Log with special formatting for easy parsing
+        logger.info(f"TIMING_MARKER: {message} at {timestamp:.6f} ({time.strftime('%H:%M:%S', time.localtime(timestamp))})")
+        
+        return True
+    
+    def _log_timing_summary(self):
+        """Log a summary of timing markers if benchmark timing was measured"""
+        if 'BENCHMARK_START_TIME' in self.timing_markers and 'BENCHMARK_END_TIME' in self.timing_markers:
+            start_time = self.timing_markers['BENCHMARK_START_TIME']
+            end_time = self.timing_markers['BENCHMARK_END_TIME']
+            duration = end_time - start_time
+            
+            logger.info("=" * 60)
+            logger.info("BENCHMARK TIMING SUMMARY")
+            logger.info("=" * 60)
+            
+            # Fixed formatting - removed %f and added None checks
+            try:
+                start_str = time.strftime('%H:%M:%S', time.localtime(start_time))
+                end_str = time.strftime('%H:%M:%S', time.localtime(end_time))
+                
+                logger.info(f">>>> Benchmark Start:     {start_str}")
+                logger.info(f">>>> Benchmark End:       {end_str}")
+                logger.info(f">>>> Total Duration:      {duration:.2f} seconds ({duration/60:.1f} minutes)")
+            except Exception as e:
+                logger.error(f"Error formatting timing: {e}")
+                logger.info(f">>>> Benchmark Start:     {start_time}")
+                logger.info(f">>>> Benchmark End:       {end_time}")
+                logger.info(f">>>> Total Duration:      {duration} seconds")
+            
+            logger.info("=" * 60)
+            
+            # Log for automated parsing - with None check
+            try:
+                logger.info(f"BENCHMARK_DURATION: {duration:.6f}")
+            except:
+                logger.info(f"BENCHMARK_DURATION: {duration}")
+
+    def get_benchmark_duration(self):
+        """Get the benchmark duration if timing markers are available"""
+        if 'BENCHMARK_START_TIME' in self.timing_markers and 'BENCHMARK_END_TIME' in self.timing_markers:
+            return self.timing_markers['BENCHMARK_END_TIME'] - self.timing_markers['BENCHMARK_START_TIME']
+        return None
+    
     def _resolve_template_path(self, template_path, game_config):
         """Resolve template path relative to game or global templates"""
         if Path(template_path).is_absolute() or template_path.startswith('templates/'):
@@ -569,5 +633,9 @@ class WorkflowEngine:
             elif action == 'wait':
                 if step.get('seconds') is None:
                     warnings.append(f"Step {step_num}: No duration specified for wait, using default 1s")
+            
+            elif action == 'log_message':
+                if not step.get('message'):
+                    warnings.append(f"Step {step_num}: No message specified for log_message, using default")
         
         return errors, warnings

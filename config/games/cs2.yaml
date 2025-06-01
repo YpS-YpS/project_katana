@@ -24,7 +24,7 @@ workflow:
   # ===== NAVIGATE TO BENCHMARK =====
   - action: "wait_for_template"
     template: "play_button.png"
-    timeout: 15
+    timeout: 60
   
   - action: "click_template"
     template: "play_button.png"
@@ -71,7 +71,7 @@ workflow:
   - action: "wait_for_template"
     template: "benchmark_start.png"
     timeout: 120
-    threshold: 0.7  # Lower threshold if needed
+    threshold: 0.90  # Lower threshold if needed
   
   - action: "take_screenshot"
     name: "06_benchmark_start_detected"
@@ -85,7 +85,7 @@ workflow:
   - action: "wait_for_template"
     template: "benchmark_end.png" 
     timeout: 300  # Max 5 minutes for benchmark
-    threshold: 0.7
+    threshold: 0.90
   
   # Mark benchmark end time
   - action: "log_message"
@@ -96,7 +96,7 @@ workflow:
   
   # Wait for results to stabilize
   - action: "wait"
-    seconds: 5
+    seconds: 20
   
   # ===== CAPTURE FINAL RESULTS =====
   - action: "take_screenshot"
@@ -107,20 +107,19 @@ workflow:
     seconds: 10
   
   # ===== EXIT BENCHMARK =====
-  - action: "click_template_if_exists"
-    template: "quit_button.png"
-    timeout: 10
-    optional: true
-  
   - action: "press_key"
     key: "escape"
     delay: 2
+
+  - action: "click_template_if_exists"
+    template: "power_button.png"
+    timeout: 10
+
+  - action: "click_template_if_exists"
+    template: "quit_button.png"
+    timeout: 10
   
-  - action: "wait_for_template"
-    template: "main_menu.png"
-    timeout: 30
-    optional: true
-  
+ 
   - action: "take_screenshot"
     name: "09_workflow_complete"
 
@@ -134,3 +133,4 @@ screens:
   benchmark_start: "templates/screens/cs2/benchmark_start.png"    # NEW: Actual benchmark running
   benchmark_end: "templates/screens/cs2/benchmark_end.png"        # NEW: Benchmark complete/results
   quit_button: "templates/screens/cs2/quit_button.png"
+  power_button: "templates/screens/cs2/power_button.png"
