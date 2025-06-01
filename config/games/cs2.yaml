@@ -12,7 +12,10 @@ workflow:
   
   - action: "wait_for_game"
     timeout: 60
-  
+
+  - action: "wait"
+    seconds: 30
+
   # ===== WAIT FOR MAIN MENU =====
   - action: "wait_for_template"
     template: "main_menu.png"
@@ -20,7 +23,16 @@ workflow:
   
   - action: "take_screenshot"
     name: "01_main_menu_loaded"
-  
+
+  # ===== PRESS ESC For removing any pop up ======
+  - action: "press_key"
+    key: "escape"
+    delay: 2
+
+  - action: "press_key"
+    key: "escape"
+    delay: 2
+
   # ===== NAVIGATE TO BENCHMARK =====
   - action: "wait_for_template"
     template: "play_button.png"
