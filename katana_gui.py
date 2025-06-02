@@ -364,6 +364,8 @@ class KatanaGUI:
         button_frame = tk.Frame(list_container, bg='#ecf0f1')
         button_frame.pack(fill=tk.X, pady=5)
         
+        ttk.Button(button_frame, text="🖥️ Test Monitors", 
+                  command=self.test_monitor_detection).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="🔄 Refresh", 
                   command=self.refresh_games).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(button_frame, text="🔧 Test Components", 
@@ -1979,6 +1981,39 @@ class KatanaGUI:
         dialog.wait_window()
         
         return result[0]
+    
+    def test_monitor_detection(self):
+        """Test and display monitor information"""
+        try:
+            import mss
+            import tkinter as tk
+            from tkinter import messagebox
+            
+            with mss.mss() as sct:
+                monitor_info = []
+                
+                for i, monitor in enumerate(sct.monitors):
+                    if i == 0:  # Skip the "all monitors" entry
+                        continue
+                        
+                    width = monitor['width']
+                    height = monitor['height']
+                    left = monitor['left']
+                    top = monitor['top']
+                    
+                    monitor_info.append(f"Monitor {i}:")
+                    monitor_info.append(f"  Resolution: {width}x{height}")
+                    monitor_info.append(f"  Position: ({left}, {top})")
+                    monitor_info.append(f"  Right edge: {left + width}")
+                    monitor_info.append(f"  Bottom edge: {top + height}")
+                    monitor_info.append("")
+            
+            messagebox.showinfo("Monitor Information", "\n".join(monitor_info))
+
+            
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to detect monitors: {e}")
 
 
 class LogTextHandler(logging.Handler):

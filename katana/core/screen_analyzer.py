@@ -364,6 +364,21 @@ class ScreenAnalyzer:
 
     def _get_game_monitor(self, game_process_name=None):
         """Dynamically find which monitor has the active game window"""
+        import time
+        
+        # Cache result for 10 seconds to avoid repeated expensive calls
+        current_time = time.time()
+        cache_key = f"monitor_{game_process_name}"
+        
+        if hasattr(self, '_monitor_cache') and cache_key in self._monitor_cache:
+            cached_time, cached_monitor = self._monitor_cache[cache_key]
+            if current_time - cached_time < 10.0:  # 10 second cache
+                return cached_monitor
+        
+        # Initialize cache if needed
+        if not hasattr(self, '_monitor_cache'):
+            self._monitor_cache = {}
+        
         import mss
         try:
             if game_process_name:
@@ -379,11 +394,23 @@ class ScreenAnalyzer:
                             for i, monitor in enumerate(sct.monitors[1:], 1):
                                 if (monitor['left'] <= center_x <= monitor['left'] + monitor['width'] and
                                     monitor['top'] <= center_y <= monitor['top'] + monitor['height']):
-                                    logger.info(f"Game found on monitor {i}")
+                                    # Only log when monitor changes or first detection
+                                    if not hasattr(self, '_last_detected_monitor') or self._last_detected_monitor != i:
+                                        logger.info(f"Game found on monitor {i}")
+                                        self._last_detected_monitor = i
+                                    
+                                    # Cache the result
+                                    self._monitor_cache[cache_key] = (current_time, i)
                                     return i
             
-            return self.settings.get('monitor_index', 1)
+            default_monitor = self.settings.get('monitor_index', 1)
+            self._monitor_cache[cache_key] = (current_time, default_monitor)
+            return default_monitor
             
         except Exception as e:
             logger.warning(f"Monitor detection failed: {e}")
             return 1
+    # -----------fail safe --------- hard code monitor 1    
+    #def _get_game_monitor(self, game_process_name=None):
+    #    """Get monitor index from settings"""
+    #    return self.settings.get('monitor_index', 1)

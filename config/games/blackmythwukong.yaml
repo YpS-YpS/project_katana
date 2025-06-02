@@ -6,13 +6,15 @@ process_name: "b1"
 launch_options: " "
 startup_time: 60
 
-
 workflow:
   # ===== GAME LAUNCH =====
   - action: "launch_game"
   
   - action: "wait_for_game"
     timeout: 60
+
+  - action: "wait"
+    seconds: 30
 
   # ===== WAIT FOR MAIN MENU =====
   - action: "wait_for_template"
@@ -23,11 +25,12 @@ workflow:
   - action: "take_screenshot"
     name: "01_main_menu_loaded"
 
+  # ===== NAVIGATE TO BENCHMARK =====
   - action: "click_template"
     template: "main_menu.png"
     timeout: 10
 
-  # ===== NAVIGATE TO BENCHMARK =====
+  
   - action: "wait_for_template"
     template: "benchmark_button.png"
     timeout: 60
@@ -72,7 +75,7 @@ workflow:
   - action: "wait_for_template"
     template: "benchmark_end.png" 
     timeout: 300  # Max 5 minutes for benchmark
-    threshold: 0.90
+    threshold: 0.83
   
   # Mark benchmark end time
   - action: "log_message"
@@ -83,4 +86,10 @@ workflow:
 
   # Wait for results to stabilize
   - action: "wait"
-    seconds: 20
+    seconds: 10
+
+
+# ===== CAPTURE FINAL RESULTS =====
+  - action: "take_screenshot"
+    name: "07_results_capture"
+  
