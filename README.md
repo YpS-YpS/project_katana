@@ -214,6 +214,126 @@ workflow:
 
 #### **Available Actions:**
 
+# Project Katana - Complete Workflow Actions Reference
+
+## 🎮 Game Control Actions
+
+| Action | Description | Required Parameters | Optional Parameters |
+|--------|-------------|-------------------|-------------------|
+| `launch_game` | Launch the configured game | None | None |
+| `wait_for_game` | Wait for game process to start | None | `timeout` (default: 300)<br>`process_name` (override) |
+| `exit_game` | Close the game process | None | `force` (default: false)<br>`process_name` (override) |
+
+## 🎯 Template Matching Actions
+
+| Action | Description | Required Parameters | Optional Parameters |
+|--------|-------------|-------------------|-------------------|
+| `wait_for_template` | Wait for a UI template to appear | `template` (filename) | `timeout` (default: 300)<br>`region` [x1, y1, x2, y2]<br>`threshold` (confidence) |
+| `wait_for_any_template` | Wait for any of multiple templates | `templates` (list) | `timeout` (default: 300)<br>`region` [x1, y1, x2, y2]<br>`threshold` (confidence) |
+| `wait_for_template_disappear` | Wait for a template to disappear | `template` (filename) | `timeout` (default: 300)<br>`region` [x1, y1, x2, y2]<br>`threshold` (confidence) |
+| `click_template` | Find and click on a template | `template` (filename) | `timeout` (default: 10)<br>`region` [x1, y1, x2, y2]<br>`threshold` (confidence)<br>`button` (left/right/middle)<br>`offset` [x, y]<br>`move_duration` (default: 0.5)<br>`pre_click_delay` (default: 0.3)<br>`post_click_delay` (default: 0.5) |
+| `click_template_if_exists` | Click template if exists (non-blocking) | `template` (filename) | `region` [x1, y1, x2, y2]<br>`threshold` (confidence)<br>`button` (default: left)<br>`delay` (legacy)<br>`offset` [x, y] |
+| `check_template` | Check if template exists | `template` (filename) | `region` [x1, y1, x2, y2]<br>`threshold` (confidence) |
+
+## 🖱️ Input Actions
+
+| Action | Description | Required Parameters | Optional Parameters |
+|--------|-------------|-------------------|-------------------|
+| `press_key` | Press and release a keyboard key | `key` (key name) | `delay` (after press) |
+| `hold_key` | Hold a key for specified duration | `key` (key name) | `duration` (default: 1.0) |
+| `type_text` | Type a text string | `text` (string to type) | `delay` (after typing) |
+| `click` | Click at specific coordinates | `x` (coordinate)<br>`y` (coordinate) | `button` (default: left)<br>`delay` (after click) |
+
+## 📸 Screen Actions
+
+| Action | Description | Required Parameters | Optional Parameters |
+|--------|-------------|-------------------|-------------------|
+| `take_screenshot` | Capture a screenshot | None | `name` (filename prefix)<br>`region` [x1, y1, x2, y2] |
+| `wait_for_screen_change` | Wait for significant screen change | None | `timeout` (default: 300)<br>`region` [x1, y1, x2, y2]<br>`threshold` (default: 0.95) |
+
+## ⏱️ Timing & Flow Actions
+
+| Action | Description | Required Parameters | Optional Parameters |
+|--------|-------------|-------------------|-------------------|
+| `wait` | Wait for specified time | None | `seconds` (default: 1) |
+| `log_message` | Log message with timestamp | None | `message` (default: LOG_MESSAGE) |
+| `retry_action` | Retry a sub-action multiple times | `action_to_retry` (sub-action) | `max_retries` (default: 3)<br>`retry_delay` (default: 1) |
+
+## 🔧 Global Parameters
+
+These parameters can be applied to **any action**:
+
+| Parameter | Description | Default Value |
+|-----------|-------------|---------------|
+| `optional` | If true, failure won't stop workflow | false |
+| `step_delay` | Delay after this step completes | 0 |
+
+## 📋 Common Key Names
+
+For `press_key` and `hold_key` actions:
+
+| Key Category | Available Keys |
+|--------------|----------------|
+| **Letters** | a-z |
+| **Numbers** | 0-9 |
+| **Function Keys** | f1-f12 |
+| **Navigation** | up, down, left, right, home, end, pageup, pagedown |
+| **Modifiers** | shift, ctrl, alt, cmd |
+| **Special** | space, enter, return, tab, backspace, delete, escape |
+| **Symbols** | comma, period, slash, backslash, semicolon, quote |
+
+## 📋 Mouse Button Options
+
+For `click_template`, `click_template_if_exists`, and `click` actions:
+
+| Button | Description |
+|--------|-------------|
+| `left` | Left mouse button (default) |
+| `right` | Right mouse button |
+| `middle` | Middle mouse button/scroll wheel |
+
+## 📝 Example Usage
+
+```yaml
+workflow:
+  # Game Control
+  - action: "launch_game"
+  
+  # Template Matching with Enhanced Timing
+  - action: "click_template"
+    template: "play_button.png"
+    timeout: 15
+    move_duration: 0.8
+    pre_click_delay: 0.5
+    post_click_delay: 1.0
+    optional: false
+  
+  # Input Actions
+  - action: "press_key"
+    key: "escape"
+    delay: 2
+  
+  # Screen Capture
+  - action: "take_screenshot"
+    name: "benchmark_results"
+  
+  # Timing
+  - action: "log_message"
+    message: "BENCHMARK_START_TIME"
+  
+  - action: "wait"
+    seconds: 180
+    step_delay: 1
+```
+
+## 💡 Pro Tips
+
+1. **Use `optional: true`** for unstable UI elements that might not always appear
+2. **Adjust timing parameters** (`move_duration`, `pre_click_delay`, `post_click_delay`) for slower systems
+3. **Use `log_message`** with specific markers for automated benchmark timing analysis
+4. **Combine `check_template`** with conditional logic for dynamic workflows
+5. **Use `retry_action`** for unreliable network-dependent operations
+
 | Action | Description | Parameters |
 |--------|-------------|------------|
 | `launch_game` | Launch the game | - |
@@ -432,9 +552,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### **Getting Help:**
 - 📖 **Documentation**: Check this README first
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/project-katana/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/project-katana/discussions)
-- 📧 **Email**: katana-support@yourproject.com
+- 🐛 **Issues**: [GitHub Issues](https://github.com/YpS-YpS/project-katana/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/YpS-YpS/project-katana/discussions)
+- 📧 **Email**: random.satyajit@gmail.com
 
 ### **Community:**
 - 🎮 **Discord**: [Project Katana Community](https://discord.gg/yourserver)
