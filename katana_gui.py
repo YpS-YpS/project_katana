@@ -26,6 +26,10 @@ class KatanaGUI:
         self.games = {}
         self.selected_game = None
         
+        # Enhanced logging variables
+        self.current_run_folder = None
+        self.current_game_name = None
+        
         # Set up logging first
         self._setup_logging()
         
@@ -61,18 +65,22 @@ class KatanaGUI:
         self.root.configure(bg='#f0f0f0')
     
     def _setup_logging(self):
-        """Set up basic logging with Unicode support"""
+        """Set up enhanced logging with game-specific and run-specific folders"""
         try:
-            log_dir = os.path.join("output", "logs")
-            os.makedirs(log_dir, exist_ok=True)
-            log_file = os.path.join(log_dir, f"katana_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+            # Create base log directory
+            base_log_dir = Path("output/logs")
+            base_log_dir.mkdir(parents=True, exist_ok=True)
             
-            # Create formatters without emojis for console
+            # Create main session log (for general GUI operations)
+            session_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            session_log_file = base_log_dir / f"katana_session_{session_timestamp}.log"
+            
+            # Create formatters
             file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             
             # Set up file handler with UTF-8 encoding
-            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+            file_handler = logging.FileHandler(session_log_file, encoding='utf-8')
             file_handler.setLevel(logging.INFO)
             file_handler.setFormatter(file_formatter)
             
@@ -90,11 +98,87 @@ class KatanaGUI:
             )
             
             self.logger = logging.getLogger(__name__)
-            self.logger.info("Katana logging initialized")
+            self.logger.info("Enhanced Katana logging initialized")
+            self.logger.info(f"Session log: {session_log_file}")
             
         except Exception as e:
             print(f"Failed to setup logging: {e}")
             self.logger = logging.getLogger(__name__)
+    
+    def _create_run_specific_logging(self, game_name):
+        """Create game-specific and run-specific logging folders"""
+        try:
+            # Create run timestamp
+            run_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            
+            # Create folder structure: output/logs/[game_name]/[timestamp]/
+            game_folder = game_name.lower().replace(' ', '_').replace(':', '')
+            self.current_run_folder = Path("output") / "logs" / game_folder / run_timestamp
+            self.current_run_folder.mkdir(parents=True, exist_ok=True)
+            
+            # Create subfolders for organization
+            screenshot_folder = self.current_run_folder / "screenshots"
+            screenshot_folder.mkdir(exist_ok=True)
+            (self.current_run_folder / "debug").mkdir(exist_ok=True)
+            
+            # Create run-specific log file
+            run_log_file = self.current_run_folder / f"workflow_{run_timestamp}.log"
+            
+            # Create run-specific file handler
+            run_file_handler = logging.FileHandler(run_log_file, encoding='utf-8')
+            run_file_handler.setLevel(logging.INFO)
+            run_file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            run_file_handler.setFormatter(run_file_formatter)
+            
+            # Add handler to root logger
+            logging.getLogger().addHandler(run_file_handler)
+            
+            # Store reference for cleanup
+            self.run_file_handler = run_file_handler
+            
+            self.logger.info(f"🗂️ Created run-specific logging for {game_name}")
+            self.logger.info(f"📁 Run folder: {self.current_run_folder}")
+            self.logger.info(f"📝 Workflow log: {run_log_file}")
+            
+            # CRITICAL: Update screen analyzer to use run-specific screenshot folder
+            if self.screen_analyzer:
+                old_dir = self.screen_analyzer.screenshot_dir
+                new_dir = str(screenshot_folder)
+                self.screen_analyzer.screenshot_dir = new_dir
+                self.logger.info(f"📸 Screenshot dir changed: {old_dir} → {new_dir}")
+                
+                # Also update workflow_engine's screen_analyzer if it exists
+                if hasattr(self, 'workflow_engine') and self.workflow_engine and hasattr(self.workflow_engine, 'screen_analyzer'):
+                    self.workflow_engine.screen_analyzer.screenshot_dir = new_dir
+                    self.logger.info(f"📸 Workflow engine screenshot dir updated: {new_dir}")
+                
+            return self.current_run_folder
+            
+        except Exception as e:
+            self.logger.error(f"Failed to create run-specific logging: {e}")
+            return None
+    
+    def _cleanup_run_logging(self):
+        """Clean up run-specific logging handlers"""
+        try:
+            if hasattr(self, 'run_file_handler'):
+                logging.getLogger().removeHandler(self.run_file_handler)
+                self.run_file_handler.close()
+                delattr(self, 'run_file_handler')
+                
+            # Reset screenshot directory to default
+            default_dir = 'output/screenshots'
+            if self.screen_analyzer:
+                self.screen_analyzer.screenshot_dir = default_dir
+                self.logger.info(f"📸 Screenshot dir reset to default: {default_dir}")
+                
+                # Also reset workflow_engine's screen_analyzer
+                if hasattr(self, 'workflow_engine') and self.workflow_engine and hasattr(self.workflow_engine, 'screen_analyzer'):
+                    self.workflow_engine.screen_analyzer.screenshot_dir = default_dir
+                    self.logger.info(f"📸 Workflow engine screenshot dir reset to default: {default_dir}")
+                
+        except Exception as e:
+            self.logger.error(f"Error cleaning up run logging: {e}")
     
     def _initialize_components(self):
         """Initialize Katana components with error handling"""
@@ -134,7 +218,9 @@ class KatanaGUI:
         try:
             os.makedirs("config/games", exist_ok=True)
             os.makedirs("templates/screens", exist_ok=True)
-            self.logger.info("Created config directory")
+            os.makedirs("output/logs", exist_ok=True)
+            os.makedirs("output/screenshots", exist_ok=True)
+            self.logger.info("Created config directory structure")
         except Exception as e:
             self.logger.error(f"Failed to create config directory: {e}")
     
@@ -274,7 +360,7 @@ class KatanaGUI:
         self.details_text.pack(fill=tk.X, pady=(0, 10))
         self.details_text.config(state=tk.DISABLED)
         
-        # Action buttons with modern styling
+        # Action buttons with modern styling (ENHANCED WITH OUTPUT FOLDER)
         button_frame = tk.Frame(list_container, bg='#ecf0f1')
         button_frame.pack(fill=tk.X, pady=5)
         
@@ -284,6 +370,10 @@ class KatanaGUI:
                   command=self.test_components).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="📊 Check Status", 
                   command=self.check_game_status).pack(side=tk.LEFT, padx=5)
+        
+        # NEW: Output folder button
+        ttk.Button(button_frame, text="📁 Output Folder", 
+                  command=self.open_output_folder).pack(side=tk.LEFT, padx=5)
         
         # Workflow control frame
         workflow_frame = tk.LabelFrame(main_container, text=" ⚡ Workflow Control ", 
@@ -335,14 +425,19 @@ class KatanaGUI:
         log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_text.config(yscrollcommand=log_scrollbar.set)
         
-        # Log control buttons
+        # Log control buttons (ENHANCED WITH RUN FOLDER)
         log_control_frame = tk.Frame(control_container, bg='#ecf0f1')
         log_control_frame.pack(fill=tk.X, pady=(5, 0))
         
         ttk.Button(log_control_frame, text="🗑️ Clear", 
                   command=self.clear_log).pack(side=tk.RIGHT, padx=(5, 0))
         ttk.Button(log_control_frame, text="💾 Save", 
-                  command=self.save_log).pack(side=tk.RIGHT)
+                  command=self.save_log).pack(side=tk.RIGHT, padx=5)
+        
+        # NEW: Open current run folder button
+        self.run_folder_button = ttk.Button(log_control_frame, text="📂 Run Folder", 
+                                           command=self.open_current_run_folder, state=tk.DISABLED)
+        self.run_folder_button.pack(side=tk.RIGHT, padx=5)
         
         # Set up game selection event
         self.game_listbox.bind('<<ListboxSelect>>', self.on_game_select)
@@ -456,6 +551,9 @@ class KatanaGUI:
         ttk.Button(center_frame, text="📁 Open Config Folder", 
                   command=self.open_config_folder).pack(pady=10)
         
+        ttk.Button(center_frame, text="🔧 Visual Workflow Builder", 
+                  command=self.open_workflow_builder).pack(pady=10)
+        
         # Add workflow preview area
         preview_frame = tk.LabelFrame(content_frame, text=" 📋 Current Workflow Preview ", 
                                      font=('Segoe UI', 10, 'bold'), 
@@ -466,6 +564,46 @@ class KatanaGUI:
                                        font=('Consolas', 9), bg='white', fg='#2c3e50',
                                        relief=tk.FLAT, bd=1, state=tk.DISABLED)
         self.workflow_preview.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    # ==================== ENHANCED OUTPUT MANAGEMENT ====================
+    
+    def open_output_folder(self):
+        """Open the main output folder in file explorer"""
+        output_dir = Path("output")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                subprocess.run(['explorer', str(output_dir.resolve())])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(['open', str(output_dir.resolve())])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(output_dir.resolve())])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open output folder: {e}")
+    
+    def open_current_run_folder(self):
+        """Open the current run-specific folder if available"""
+        if self.current_run_folder and self.current_run_folder.exists():
+            try:
+                import subprocess
+                import platform
+                
+                if platform.system() == "Windows":
+                    subprocess.run(['explorer', str(self.current_run_folder.resolve())])
+                elif platform.system() == "Darwin":  # macOS
+                    subprocess.run(['open', str(self.current_run_folder.resolve())])
+                else:  # Linux
+                    subprocess.run(['xdg-open', str(self.current_run_folder.resolve())])
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to open run folder: {e}")
+        else:
+            messagebox.showinfo("Info", "No active run folder. Start a workflow to create one.")
 
     # ==================== CORE METHODS ====================
     
@@ -640,7 +778,7 @@ class KatanaGUI:
             messagebox.showerror("Error", f"Failed to check game status: {e}")
 
     def start_workflow(self):
-        """Start the benchmark workflow for the selected game"""
+        """Start the benchmark workflow for the selected game with enhanced logging"""
         if not self.selected_game:
             messagebox.showwarning("Warning", "Please select a game first")
             return
@@ -653,6 +791,22 @@ class KatanaGUI:
         if not self.selected_game['config'].get('workflow'):
             messagebox.showwarning("Warning", f"No workflow defined for {self.selected_game['config']['name']}")
             return
+        
+        # Set current game name and create run-specific logging
+        game_name = self.selected_game['config']['name']
+        self.current_game_name = game_name
+        run_folder = self._create_run_specific_logging(game_name)
+        
+        if run_folder:
+            # Enable run folder button
+            self.run_folder_button.config(state=tk.NORMAL)
+            self.logger.info(f"📁 Run folder created: {run_folder}")
+            
+            # CRITICAL: Update workflow engine's screen analyzer screenshot directory
+            if hasattr(self.workflow_engine, 'screen_analyzer') and self.workflow_engine.screen_analyzer:
+                screenshot_dir = str(run_folder / "screenshots")
+                self.workflow_engine.screen_analyzer.screenshot_dir = screenshot_dir
+                self.logger.info(f"📸 Workflow engine screenshot directory set: {screenshot_dir}")
         
         # Disable buttons during workflow
         self.start_button.config(state=tk.DISABLED)
@@ -674,27 +828,39 @@ class KatanaGUI:
         self.workflow_thread.start()
 
     def _run_workflow(self):
-        """Run the workflow in a separate thread"""
+        """Run the workflow in a separate thread with enhanced logging"""
         try:
             game_name = self.selected_game['config']['name']
             self.root.after(0, lambda: self.status_var.set(f"Running workflow for {game_name}..."))
             
+            # Log workflow start with enhanced details
+            self.logger.info("=" * 80)
+            self.logger.info(f"🚀 STARTING WORKFLOW: {game_name}")
+            self.logger.info(f"📅 Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            self.logger.info(f"📁 Run Folder: {self.current_run_folder}")
+            self.logger.info("=" * 80)
+            
             # Run the workflow
             success = self.workflow_engine.run_workflow(self.selected_game)
             
+            # Log workflow completion with enhanced details
+            self.logger.info("=" * 80)
             if success:
+                self.logger.info(f"✅ WORKFLOW COMPLETED SUCCESSFULLY: {game_name}")
+                self.logger.info(f"📁 Results saved to: {self.current_run_folder}")
                 self.root.after(0, lambda: self.status_var.set(f"Workflow completed successfully for {game_name}"))
-                self.logger.info(f"Workflow completed successfully for {game_name}")
-                self.root.after(0, lambda: messagebox.showinfo("Success", f"Workflow completed successfully for {game_name}"))
             else:
+                self.logger.info(f"❌ WORKFLOW FAILED: {game_name}")
+                self.logger.info(f"📁 Check logs in: {self.current_run_folder}")
                 self.root.after(0, lambda: self.status_var.set(f"Workflow failed for {game_name}"))
-                self.logger.error(f"Workflow failed for {game_name}")
-                self.root.after(0, lambda: messagebox.showerror("Workflow Failed", f"Workflow failed for {game_name}. Check the log for details."))
+            
+            self.logger.info(f"📅 End Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            self.logger.info("=" * 80)
         
         except Exception as e:
             self.root.after(0, lambda: self.status_var.set("Error running workflow"))
             self.logger.error(f"Error running workflow: {str(e)}")
-            self.root.after(0, lambda: messagebox.showerror("Workflow Error", str(e)))
+            self.logger.error(f"📁 Check logs in: {self.current_run_folder}")
         
         finally:
             # Re-enable buttons
@@ -703,9 +869,12 @@ class KatanaGUI:
             self.root.after(0, lambda: self.close_button.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.stop_button.config(state=tk.DISABLED))
             
-            # Remove the log handler
+            # Remove the log handler and cleanup run-specific logging
             if hasattr(self, 'log_handler'):
                 logging.getLogger().removeHandler(self.log_handler)
+            
+            # Note: Don't cleanup run logging here so logs remain accessible
+            # self._cleanup_run_logging()
 
     def stop_workflow(self):
         """Stop the currently running workflow"""
@@ -860,8 +1029,8 @@ class KatanaGUI:
             if hasattr(self, 'log_handler'):
                 logging.getLogger().removeHandler(self.log_handler)
 
-    # ==================== TEMPLATE METHODS ====================
-
+    # ==================== TEMPLATE METHODS (Truncated for space) ====================
+    
     def take_quick_screenshot(self):
         """Take a quick screenshot"""
         if not self.screen_analyzer:
@@ -891,6 +1060,149 @@ class KatanaGUI:
                 messagebox.showerror("Error", "Failed to save screenshot")
         except Exception as e:
             messagebox.showerror("Error", f"Screenshot failed: {e}")
+
+    # [Additional template methods would continue here...]
+    
+    def refresh_templates(self):
+        """Refresh the template list"""
+        self.template_listbox.delete(0, tk.END)
+        
+        templates_dir = Path("templates/screens")
+        if not templates_dir.exists():
+            self.template_listbox.insert(tk.END, "No templates directory found")
+            return
+        
+        # Find all template files
+        template_files = []
+        for game_dir in templates_dir.iterdir():
+            if game_dir.is_dir():
+                for template_file in game_dir.glob("*.png"):
+                    relative_path = template_file.relative_to(templates_dir)
+                    template_files.append(str(relative_path))
+        
+        if not template_files:
+            self.template_listbox.insert(tk.END, "No template files found")
+            return
+        
+        for template in sorted(template_files):
+            self.template_listbox.insert(tk.END, template)
+
+    def open_templates_folder(self):
+        """Open the templates folder in file explorer"""
+        templates_dir = Path("templates/screens")
+        templates_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                subprocess.run(['explorer', str(templates_dir.resolve())])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(['open', str(templates_dir.resolve())])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(templates_dir.resolve())])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open templates folder: {e}")
+
+    def view_template(self):
+        """View the selected template"""
+        selection = self.template_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("Warning", "Please select a template to view")
+            return
+        
+        template_name = self.template_listbox.get(selection[0])
+        if template_name in ["No templates directory found", "No template files found"]:
+            return
+        
+        template_path = Path("templates/screens") / template_name
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                subprocess.run(['start', str(template_path.resolve())], shell=True)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(['open', str(template_path.resolve())])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(template_path.resolve())])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open template: {e}")
+
+    def open_config_folder(self):
+        """Open the config folder"""
+        config_dir = Path("config")
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                subprocess.run(['explorer', str(config_dir.resolve())])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(['open', str(config_dir.resolve())])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(config_dir.resolve())])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open config folder: {e}")
+    
+    def open_workflow_builder(self):
+        """Open the visual workflow builder"""
+        try:
+            from workflow_builder import WorkflowBuilder
+            
+            # Get current game's workflow if selected
+            existing_workflow = None
+            game_name = None
+            
+            if self.selected_game:
+                game_name = self.selected_game['config']['name']
+                existing_workflow = self.selected_game['config'].get('workflow', [])
+            
+            # Open workflow builder
+            builder = WorkflowBuilder(
+                parent=self.root,
+                game_name=game_name,
+                existing_workflow=existing_workflow
+            )
+            
+        except ImportError:
+            messagebox.showerror("Error", "Workflow builder module not found. Make sure workflow_builder.py is in the same directory.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open workflow builder: {e}")
+
+    def clear_log(self):
+        """Clear the log text widget"""
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.delete(1.0, tk.END)
+        self.log_text.config(state=tk.DISABLED)
+
+    def save_log(self):
+        """Save the current log to a file"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"katana_gui_log_{timestamp}.txt"
+            
+            filepath = filedialog.asksaveasfilename(
+                defaultextension=".txt",
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+                initialname=filename
+            )
+            
+            if filepath:
+                log_content = self.log_text.get(1.0, tk.END)
+                with open(filepath, 'w') as f:
+                    f.write(log_content)
+                messagebox.showinfo("Success", f"Log saved to {filepath}")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save log: {e}")
 
     def capture_template(self):
         """Capture a template with name and game association"""
@@ -1246,166 +1558,6 @@ class KatanaGUI:
         ttk.Button(button_frame, text="Take Reference Screenshot", command=take_reference_screenshot).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Close", command=close_dialog).pack(side=tk.RIGHT, padx=5)
 
-    def refresh_templates(self):
-        """Refresh the template list"""
-        self.template_listbox.delete(0, tk.END)
-        
-        templates_dir = Path("templates/screens")
-        if not templates_dir.exists():
-            self.template_listbox.insert(tk.END, "No templates directory found")
-            return
-        
-        # Find all template files
-        template_files = []
-        for game_dir in templates_dir.iterdir():
-            if game_dir.is_dir():
-                for template_file in game_dir.glob("*.png"):
-                    relative_path = template_file.relative_to(templates_dir)
-                    template_files.append(str(relative_path))
-        
-        if not template_files:
-            self.template_listbox.insert(tk.END, "No template files found")
-            return
-        
-        for template in sorted(template_files):
-            self.template_listbox.insert(tk.END, template)
-
-    def open_templates_folder(self):
-        """Open the templates folder in file explorer"""
-        templates_dir = Path("templates/screens")
-        templates_dir.mkdir(parents=True, exist_ok=True)
-        
-        try:
-            import subprocess
-            import platform
-            
-            if platform.system() == "Windows":
-                subprocess.run(['explorer', str(templates_dir.resolve())])
-            elif platform.system() == "Darwin":  # macOS
-                subprocess.run(['open', str(templates_dir.resolve())])
-            else:  # Linux
-                subprocess.run(['xdg-open', str(templates_dir.resolve())])
-                
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to open templates folder: {e}")
-
-    def view_template(self):
-        """View the selected template"""
-        selection = self.template_listbox.curselection()
-        if not selection:
-            messagebox.showwarning("Warning", "Please select a template to view")
-            return
-        
-        template_name = self.template_listbox.get(selection[0])
-        if template_name in ["No templates directory found", "No template files found"]:
-            return
-        
-        template_path = Path("templates/screens") / template_name
-        
-        try:
-            import subprocess
-            import platform
-            
-            if platform.system() == "Windows":
-                subprocess.run(['start', str(template_path.resolve())], shell=True)
-            elif platform.system() == "Darwin":  # macOS
-                subprocess.run(['open', str(template_path.resolve())])
-            else:  # Linux
-                subprocess.run(['xdg-open', str(template_path.resolve())])
-                
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to open template: {e}")
-
-    def open_config_folder(self):
-        """Open the config folder"""
-        config_dir = Path("config")
-        config_dir.mkdir(parents=True, exist_ok=True)
-        
-        try:
-            import subprocess
-            import platform
-            
-            if platform.system() == "Windows":
-                subprocess.run(['explorer', str(config_dir.resolve())])
-            elif platform.system() == "Darwin":  # macOS
-                subprocess.run(['open', str(config_dir.resolve())])
-            else:  # Linux
-                subprocess.run(['xdg-open', str(config_dir.resolve())])
-                
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to open config folder: {e}")
-
-    def _show_choice_dialog(self, title, message, choices):
-        """Show a dialog with multiple choices"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title(title)
-        dialog.geometry("300x200")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        
-        # Center the dialog
-        dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 50, self.root.winfo_rooty() + 50))
-        
-        result = [None]  # Use list to store result from closure
-        
-        ttk.Label(dialog, text=message).pack(pady=10)
-        
-        # Create listbox for choices
-        listbox = tk.Listbox(dialog, height=6)
-        listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        for choice in choices:
-            listbox.insert(tk.END, choice)
-        
-        def on_ok():
-            selection = listbox.curselection()
-            if selection:
-                result[0] = choices[selection[0]]
-            dialog.destroy()
-        
-        def on_cancel():
-            dialog.destroy()
-        
-        button_frame = ttk.Frame(dialog)
-        button_frame.pack(pady=10)
-        
-        ttk.Button(button_frame, text="OK", command=on_ok).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side=tk.LEFT, padx=5)
-        
-        # Wait for dialog to close
-        dialog.wait_window()
-        
-        return result[0]
-
-    def clear_log(self):
-        """Clear the log text widget"""
-        self.log_text.config(state=tk.NORMAL)
-        self.log_text.delete(1.0, tk.END)
-        self.log_text.config(state=tk.DISABLED)
-
-    def save_log(self):
-        """Save the current log to a file"""
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"katana_gui_log_{timestamp}.txt"
-            
-            filepath = filedialog.asksaveasfilename(
-                defaultextension=".txt",
-                filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-                initialname=filename
-            )
-            
-            if filepath:
-                log_content = self.log_text.get(1.0, tk.END)
-                with open(filepath, 'w') as f:
-                    f.write(log_content)
-                messagebox.showinfo("Success", f"Log saved to {filepath}")
-                
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save log: {e}")
-
-    # ==================== MONITORING METHODS ====================
-    
     def monitor_template(self):
         """Monitor a template continuously with real-time confidence updates"""
         if not self.screen_analyzer:
@@ -1785,6 +1937,48 @@ class KatanaGUI:
             timestamp = datetime.now().strftime("%H:%M:%S")
             self.root.after(0, lambda t=timestamp: log_text.insert(tk.END, f"❌ {t} - Monitoring failed: {str(e)}\n"))
             self.root.after(0, lambda: log_text.see(tk.END))
+
+    def _show_choice_dialog(self, title, message, choices):
+        """Show a dialog with multiple choices"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.geometry("300x200")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 50, self.root.winfo_rooty() + 50))
+        
+        result = [None]  # Use list to store result from closure
+        
+        ttk.Label(dialog, text=message).pack(pady=10)
+        
+        # Create listbox for choices
+        listbox = tk.Listbox(dialog, height=6)
+        listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        for choice in choices:
+            listbox.insert(tk.END, choice)
+        
+        def on_ok():
+            selection = listbox.curselection()
+            if selection:
+                result[0] = choices[selection[0]]
+            dialog.destroy()
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=10)
+        
+        ttk.Button(button_frame, text="OK", command=on_ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side=tk.LEFT, padx=5)
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        
+        return result[0]
 
 
 class LogTextHandler(logging.Handler):
