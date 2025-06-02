@@ -1041,10 +1041,10 @@ class KatanaGUI:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"quick_screenshot_{timestamp}"
             
-            messagebox.showinfo("Screenshot", "Click OK and switch to the window you want to capture.\nScreenshot will be taken in 3 seconds.")
+            #messagebox.showinfo("Screenshot", "Click OK and switch to the window you want to capture.\nScreenshot will be taken in 3 seconds.")
             
-            # Take screenshot after delay
-            self.root.after(3000, lambda: self._take_delayed_screenshot(filename))
+            # Take screenshot after delay - update no delay - 2/6/2025
+            self.root.after(0, lambda: self._take_delayed_screenshot(filename))
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to take screenshot: {e}")
