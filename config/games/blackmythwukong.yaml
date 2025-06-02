@@ -1,0 +1,86 @@
+name: "Black Myth Wukong"
+type: "steam"
+app_id: "3132990"
+exe_name: "b1-Win64-Shipping.exe.exe"
+process_name: "b1"
+launch_options: " "
+startup_time: 60
+
+
+workflow:
+  # ===== GAME LAUNCH =====
+  - action: "launch_game"
+  
+  - action: "wait_for_game"
+    timeout: 60
+
+  # ===== WAIT FOR MAIN MENU =====
+  - action: "wait_for_template"
+    template: "main_menu.png"
+    timeout: 90
+    threshold: 0.90
+  
+  - action: "take_screenshot"
+    name: "01_main_menu_loaded"
+
+  - action: "click_template"
+    template: "main_menu.png"
+    timeout: 10
+
+  # ===== NAVIGATE TO BENCHMARK =====
+  - action: "wait_for_template"
+    template: "benchmark_button.png"
+    timeout: 60
+  
+  - action: "take_screenshot"
+    name: "02_benchmark_option_menu_seen"
+    delay: 2
+
+  - action: "click_template"
+    template: "benchmark_button.png"
+    timeout: 10
+    threshold: 0.90
+  
+  - action: "take_screenshot"
+    name: "03_after_benchmark_click"
+    delay: 1
+  
+# ===== WAIT FOR POP UP and click confirm =====
+# click Confirm - "Are you sure you want to run benchmark" Dialog box
+  - action: "click_template"
+    template: "confirm_button.png"
+    timeout: 10
+    threshold: 0.90
+
+  - action: "take_screenshot"
+    name: "04_benchmark_loading"
+# Wait for loading screen to finish and benchmark to actually begin
+  - action: "wait_for_template"
+    template: "benchmark_start.png"
+    timeout: 120
+    threshold: 0.90  # Lower threshold if needed  
+# Mark benchmark start time (workflow engine will log timestamp)
+  - action: "log_message"
+    message: "BENCHMARK_START_TIME"
+
+  - action: "take_screenshot"
+    name: "05_benchmark_start_detected"
+
+
+# ===== WAIT FOR BENCHMARK COMPLETION =====
+  # Wait for benchmark to complete (detect end screen/results)
+  - action: "wait_for_template"
+    template: "benchmark_end.png" 
+    timeout: 300  # Max 5 minutes for benchmark
+    threshold: 0.90
+  
+  # Mark benchmark end time
+  - action: "log_message"
+    message: "BENCHMARK_END_TIME"
+  
+  - action: "take_screenshot"
+    name: "06_benchmark_end_detected"
+
+  # Wait for results to stabilize
+  - action: "wait"
+    seconds: 20
