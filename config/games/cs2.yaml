@@ -58,6 +58,7 @@ workflow:
   
   - action: "wait_for_template"
     template: "fps_benchmark_map.png"
+    threshold: 0.80
     timeout: 30
   
   - action: "click_template"
