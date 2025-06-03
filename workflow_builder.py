@@ -7,804 +7,920 @@ from datetime import datetime
 
 class WorkflowBuilder:
     def __init__(self, parent=None, game_name=None, existing_workflow=None):
-        self.parent = parent
-        self.game_name = game_name
-        self.workflow_steps = existing_workflow or []
-        self.templates = self._load_templates()
+        self.root = tk.Toplevel(parent) if parent else tk.Tk()
+        self.root.title("🛠️ Project Katana - Workflow Builder")
+        self.root.geometry("1200x900")
+        self.root.minsize(1200, 900)
         
-        # Create main window
-        self.window = tk.Toplevel(parent) if parent else tk.Tk()
-        self.window.title(f"🔧 Workflow Builder - {game_name or 'New Workflow'}")
-        self.window.geometry("1200x800")
-        self.window.minsize(1000, 600)
+        # Data structures
+        self.game_config = {
+            'name': game_name or "New Game",
+            'type': "steam",
+            'app_id': "",
+            'exe_name': "",
+            'process_name': "",
+            'launch_options': "",
+            'startup_time': 60
+        }
+        
+        self.workflow_steps = existing_workflow or []
+        self.step_counter = len(self.workflow_steps)
         
         # Available actions with their parameters
         self.action_definitions = {
             "launch_game": {
-                "name": "Launch Game",
-                "icon": "🚀",
-                "params": {}
+                "description": "🚀 Launch the configured game",
+                "parameters": []
             },
             "wait_for_game": {
-                "name": "Wait for Game",
-                "icon": "⏳",
-                "params": {
-                    "timeout": {"type": "int", "default": 60, "label": "Timeout (seconds)"}
-                }
+                "description": "⏳ Wait for game process to start",
+                "parameters": ["timeout", "process_name"]
+            },
+            "exit_game": {
+                "description": "🛑 Close the game process",
+                "parameters": ["force", "process_name"]
             },
             "wait_for_template": {
-                "name": "Wait for Template",
-                "icon": "👁️",
-                "params": {
-                    "template": {"type": "template", "default": "", "label": "Template"},
-                    "timeout": {"type": "int", "default": 30, "label": "Timeout (seconds)"},
-                    "threshold": {"type": "float", "default": 0.8, "label": "Threshold", "min": 0.1, "max": 1.0}
-                }
+                "description": "🎯 Wait for UI template to appear",
+                "parameters": ["template", "timeout", "region", "threshold"]
+            },
+            "wait_for_any_template": {
+                "description": "🎯 Wait for any of multiple templates",
+                "parameters": ["templates", "timeout", "region", "threshold"]
+            },
+            "wait_for_template_disappear": {
+                "description": "👻 Wait for template to disappear",
+                "parameters": ["template", "timeout", "region", "threshold"]
             },
             "click_template": {
-                "name": "Click Template", 
-                "icon": "🖱️",
-                "params": {
-                    "template": {"type": "template", "default": "", "label": "Template"},
-                    "timeout": {"type": "int", "default": 10, "label": "Timeout (seconds)"},
-                    "button": {"type": "choice", "default": "left", "choices": ["left", "right", "middle"], "label": "Mouse Button"},
-                    "move_duration": {"type": "float", "default": 0.5, "label": "Move Duration", "min": 0.1, "max": 3.0},
-                    "pre_click_delay": {"type": "float", "default": 0.3, "label": "Pre-click Delay", "min": 0.0, "max": 2.0},
-                    "post_click_delay": {"type": "float", "default": 0.5, "label": "Post-click Delay", "min": 0.0, "max": 2.0}
-                }
+                "description": "🖱️ Find and click on template",
+                "parameters": ["template", "timeout", "region", "threshold", "button", "offset", "move_duration", "pre_click_delay", "post_click_delay"]
             },
             "click_template_if_exists": {
-                "name": "Click Template (Optional)",
-                "icon": "🖱️",
-                "params": {
-                    "template": {"type": "template", "default": "", "label": "Template"},
-                    "optional": {"type": "bool", "default": True, "label": "Optional"},
-                    "button": {"type": "choice", "default": "left", "choices": ["left", "right", "middle"], "label": "Mouse Button"}
-                }
+                "description": "🖱️ Click template if it exists (optional)",
+                "parameters": ["template", "region", "threshold", "button", "delay", "offset"]
+            },
+            "check_template": {
+                "description": "🔍 Check if template exists",
+                "parameters": ["template", "region", "threshold"]
             },
             "press_key": {
-                "name": "Press Key",
-                "icon": "⌨️", 
-                "params": {
-                    "key": {"type": "string", "default": "escape", "label": "Key"},
-                    "delay": {"type": "float", "default": 0.5, "label": "Delay (seconds)", "min": 0.0, "max": 5.0}
-                }
+                "description": "⌨️ Press and release a key",
+                "parameters": ["key", "delay"]
             },
             "hold_key": {
-                "name": "Hold Key",
-                "icon": "⌨️",
-                "params": {
-                    "key": {"type": "string", "default": "space", "label": "Key"},
-                    "duration": {"type": "float", "default": 1.0, "label": "Duration (seconds)", "min": 0.1, "max": 10.0}
-                }
+                "description": "⌨️ Hold a key for duration",
+                "parameters": ["key", "duration"]
             },
             "type_text": {
-                "name": "Type Text",
-                "icon": "📝",
-                "params": {
-                    "text": {"type": "string", "default": "", "label": "Text to Type"},
-                    "delay": {"type": "float", "default": 0.5, "label": "Delay (seconds)", "min": 0.0, "max": 5.0}
-                }
+                "description": "📝 Type text string",
+                "parameters": ["text", "delay"]
+            },
+            "click": {
+                "description": "🖱️ Click at coordinates",
+                "parameters": ["x", "y", "button", "delay"]
             },
             "take_screenshot": {
-                "name": "Take Screenshot",
-                "icon": "📸",
-                "params": {
-                    "name": {"type": "string", "default": "screenshot", "label": "Screenshot Name"}
-                }
+                "description": "📸 Capture screenshot",
+                "parameters": ["name", "region"]
+            },
+            "wait_for_screen_change": {
+                "description": "🔄 Wait for screen to change",
+                "parameters": ["timeout", "region", "threshold"]
             },
             "wait": {
-                "name": "Wait",
-                "icon": "⏱️",
-                "params": {
-                    "seconds": {"type": "float", "default": 1.0, "label": "Seconds", "min": 0.1, "max": 300.0}
-                }
+                "description": "⏰ Wait for specified time",
+                "parameters": ["seconds"]
             },
             "log_message": {
-                "name": "Log Message",
-                "icon": "📝",
-                "params": {
-                    "message": {"type": "string", "default": "LOG_MESSAGE", "label": "Message"}
-                }
+                "description": "📝 Log timestamped message",
+                "parameters": ["message"]
+            },
+            "retry_action": {
+                "description": "🔄 Retry a sub-action",
+                "parameters": ["action_to_retry", "max_retries", "retry_delay"]
             }
         }
         
         self.setup_ui()
-    
-    def _load_templates(self):
-        """Load available templates"""
-        templates = {}
-        templates_dir = Path("templates/screens")
         
-        if templates_dir.exists():
-            for game_dir in templates_dir.iterdir():
-                if game_dir.is_dir():
-                    game_templates = []
-                    for template_file in game_dir.glob("*.png"):
-                        game_templates.append(template_file.name)
-                    if game_templates:
-                        templates[game_dir.name] = sorted(game_templates)
-        
-        return templates
+        if existing_workflow:
+            self.load_existing_workflow()
     
     def setup_ui(self):
-        # Configure window style
-        style = ttk.Style()
-        style.configure('Builder.TLabelframe', font=('Segoe UI', 10, 'bold'))
+        """Set up the main UI"""
+        # Create main container
+        main_container = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Create main paned window
-        main_paned = ttk.PanedWindow(self.window, orient=tk.HORIZONTAL)
-        main_paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Left panel - Game config and controls
+        left_panel = ttk.Frame(main_container)
+        main_container.add(left_panel, weight=1)
         
-        # Left panel - Actions and Templates
-        left_frame = ttk.Frame(main_paned)
-        main_paned.add(left_frame, weight=1)
+        # Right panel - Workflow steps
+        right_panel = ttk.Frame(main_container)
+        main_container.add(right_panel, weight=2)
         
-        # Right panel - Workflow
-        right_frame = ttk.Frame(main_paned)
-        main_paned.add(right_frame, weight=2)
-        
-        self.setup_left_panel(left_frame)
-        self.setup_right_panel(right_frame)
-        self.setup_menu()
-    
-    def setup_menu(self):
-        """Setup menu bar"""
-        menubar = tk.Menu(self.window)
-        self.window.config(menu=menubar)
-        
-        # File menu
-        file_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="New Workflow", command=self.new_workflow)
-        file_menu.add_command(label="Open Workflow", command=self.open_workflow)
-        file_menu.add_command(label="Save Workflow", command=self.save_workflow)
-        file_menu.add_command(label="Save As...", command=self.save_workflow_as)
-        file_menu.add_separator()
-        file_menu.add_command(label="Export YAML", command=self.export_yaml)
-        
-        # Tools menu
-        tools_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Tools", menu=tools_menu)
-        tools_menu.add_command(label="Refresh Templates", command=self.refresh_templates)
-        tools_menu.add_command(label="Validate Workflow", command=self.validate_workflow)
+        self.setup_left_panel(left_panel)
+        self.setup_right_panel(right_panel)
     
     def setup_left_panel(self, parent):
-        """Setup left panel with actions and templates"""
-        # Actions section
-        actions_frame = ttk.LabelFrame(parent, text="🎯 Available Actions", style='Builder.TLabelframe')
-        actions_frame.pack(fill=tk.X, pady=(0, 5))
+        """Set up the left panel with game config and controls"""
+        # Game Configuration Section
+        game_frame = ttk.LabelFrame(parent, text="🎮 Game Configuration", padding=10)
+        game_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # Search actions
-        search_frame = ttk.Frame(actions_frame)
-        search_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
+        # Game config fields
+        config_fields = [
+            ("Game Name:", "name", "text"),
+            ("Type:", "type", "combo", ["steam", "epic", "other"]),
+            ("Steam App ID:", "app_id", "text"),
+            ("Executable Name:", "exe_name", "text"),
+            ("Process Name:", "process_name", "text"),
+            ("Launch Options:", "launch_options", "text"),
+            ("Startup Time (s):", "startup_time", "number")
+        ]
         
-        ttk.Label(search_frame, text="🔍 Search:").pack(side=tk.LEFT)
-        self.action_search = ttk.Entry(search_frame)
-        self.action_search.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
-        self.action_search.bind('<KeyRelease>', self.filter_actions)
-        
-        # Actions list
-        actions_list_frame = ttk.Frame(actions_frame)
-        actions_list_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-        
-        self.actions_listbox = tk.Listbox(actions_list_frame, font=('Segoe UI', 9), height=6)
-        self.actions_listbox.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
-        actions_scroll = ttk.Scrollbar(actions_list_frame, orient=tk.VERTICAL, command=self.actions_listbox.yview)
-        actions_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.actions_listbox.config(yscrollcommand=actions_scroll.set)
-        
-        # Add action button
-        ttk.Button(actions_frame, text="➕ Add Action", command=self.add_action).pack(pady=(0, 10))
-        
-        # Templates section
-        templates_frame = ttk.LabelFrame(parent, text="🎯 Available Templates", style='Builder.TLabelframe')
-        templates_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
-        
-        # Template tree
-        template_tree_frame = ttk.Frame(templates_frame)
-        template_tree_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        self.template_tree = ttk.Treeview(template_tree_frame, height=6)
-        self.template_tree.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
-        template_scroll = ttk.Scrollbar(template_tree_frame, orient=tk.VERTICAL, command=self.template_tree.yview)
-        template_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.template_tree.config(yscrollcommand=template_scroll.set)
-        
-        # Bind template selection
-        self.template_tree.bind('<<TreeviewSelect>>', self.on_template_select)
-        
-        # Template preview section
-        preview_frame = ttk.LabelFrame(templates_frame, text="👁️ Template Preview", style='Builder.TLabelframe')
-        preview_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 10))
-        
-        # Preview canvas
-        self.preview_canvas = tk.Canvas(preview_frame, bg='white', height=150)
-        self.preview_canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Preview info label
-        self.preview_info = ttk.Label(preview_frame, text="Select a template to preview", 
-                                    font=('Segoe UI', 8), foreground='gray')
-        self.preview_info.pack(pady=(0, 5))
-        
-        # Populate initial data
-        self.populate_actions()
-        self.populate_templates()
-    
-    def on_template_select(self, event):
-        """Handle template selection"""
-        selection = self.template_tree.selection()
-        if not selection:
-            self.clear_preview()
-            return
-        
-        item = selection[0]
-        item_text = self.template_tree.item(item, 'text')
-        
-        # Check if it's a template (has 🎯 icon)
-        if '🎯' in item_text:
-            template_name = item_text.replace('🎯 ', '')
-            self.show_template_preview(template_name)
-        else:
-            self.clear_preview()
-
-    def show_template_preview(self, template_name):
-        """Show preview of selected template"""
-        try:
-            from PIL import Image, ImageTk
+        self.config_vars = {}
+        for i, field_info in enumerate(config_fields):
+            label_text, key, field_type = field_info[:3]
             
-            # Find template file
-            template_path = None
-            for game, templates in self.templates.items():
-                if template_name in templates:
-                    template_path = Path("templates/screens") / game / template_name
-                    break
+            ttk.Label(game_frame, text=label_text).grid(row=i, column=0, sticky="w", pady=2)
             
-            if not template_path or not template_path.exists():
-                self.clear_preview()
-                return
+            if field_type == "text":
+                var = tk.StringVar(value=str(self.game_config.get(key, "")))
+                entry = ttk.Entry(game_frame, textvariable=var, width=30)
+                entry.grid(row=i, column=1, sticky="ew", pady=2, padx=(5, 0))
+            elif field_type == "combo":
+                var = tk.StringVar(value=self.game_config.get(key, field_info[3][0]))
+                combo = ttk.Combobox(game_frame, textvariable=var, values=field_info[3], width=27, state="readonly")
+                combo.grid(row=i, column=1, sticky="ew", pady=2, padx=(5, 0))
+            elif field_type == "number":
+                var = tk.IntVar(value=self.game_config.get(key, 60))
+                entry = ttk.Entry(game_frame, textvariable=var, width=30)
+                entry.grid(row=i, column=1, sticky="ew", pady=2, padx=(5, 0))
             
-            # Load and resize image
-            image = Image.open(template_path)
-            
-            # Calculate scaling to fit canvas
-            canvas_width = self.preview_canvas.winfo_width() or 150
-            canvas_height = self.preview_canvas.winfo_height() or 100
-            
-            # Scale image to fit
-            img_ratio = image.width / image.height
-            canvas_ratio = canvas_width / canvas_height
-            
-            if img_ratio > canvas_ratio:
-                # Image is wider
-                new_width = canvas_width - 10
-                new_height = int(new_width / img_ratio)
-            else:
-                # Image is taller
-                new_height = canvas_height - 10
-                new_width = int(new_height * img_ratio)
-            
-            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            
-            # Convert for tkinter
-            self.preview_image = ImageTk.PhotoImage(image)
-            
-            # Clear canvas and show image
-            self.preview_canvas.delete("all")
-            x = canvas_width // 2
-            y = canvas_height // 2
-            self.preview_canvas.create_image(x, y, image=self.preview_image)
-            
-            # Update info
-            self.preview_info.config(text=f"{template_name} ({image.width}x{image.height})")
-            
-        except Exception as e:
-            self.clear_preview()
-            self.preview_info.config(text=f"Preview error: {str(e)}")
-
-    def clear_preview(self):
-        """Clear template preview"""
-        self.preview_canvas.delete("all")
-        self.preview_canvas.create_text(100, 75, text="No template selected", 
-                                    fill='gray', font=('Segoe UI', 10))
-        self.preview_info.config(text="Select a template to preview")
+            self.config_vars[key] = var
+        
+        game_frame.grid_columnconfigure(1, weight=1)
+        
+        # Action Selection Section
+        action_frame = ttk.LabelFrame(parent, text="➕ Add New Step", padding=10)
+        action_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(action_frame, text="Action Type:").pack(anchor="w")
+        self.action_var = tk.StringVar()
+        self.action_combo = ttk.Combobox(action_frame, textvariable=self.action_var, 
+                                        values=list(self.action_definitions.keys()), 
+                                        state="readonly", width=40)
+        self.action_combo.pack(fill=tk.X, pady=(2, 5))
+        self.action_combo.bind('<<ComboboxSelected>>', self.on_action_selected)
+        
+        # Action description
+        self.action_desc = ttk.Label(action_frame, text="Select an action to see description", 
+                                    foreground="gray", wraplength=300)
+        self.action_desc.pack(anchor="w", pady=(0, 10))
+        
+        # Comment field
+        ttk.Label(action_frame, text="Comment (optional):").pack(anchor="w")
+        self.comment_var = tk.StringVar()
+        comment_entry = ttk.Entry(action_frame, textvariable=self.comment_var, width=40)
+        comment_entry.pack(fill=tk.X, pady=(2, 5))
+        
+        # Template browser
+        template_frame = ttk.Frame(action_frame)
+        template_frame.pack(fill=tk.X, pady=(5, 10))
+        
+        ttk.Label(template_frame, text="Available Templates:").pack(anchor="w")
+        self.template_listbox = tk.Listbox(template_frame, height=4, font=('Segoe UI', 8))
+        self.template_listbox.pack(fill=tk.X, pady=(2, 5))
+        self.template_listbox.bind('<Double-Button-1>', self.on_template_double_click)
+        
+        template_btn_frame = ttk.Frame(template_frame)
+        template_btn_frame.pack(fill=tk.X)
+        ttk.Button(template_btn_frame, text="🔄 Refresh", command=self.refresh_templates).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(template_btn_frame, text="📁 Browse", command=self.browse_templates).pack(side=tk.LEFT)
+        
+        self.refresh_templates()
+        
+        # Add step button
+        add_button = ttk.Button(action_frame, text="➕ Add Step", command=self.add_step)
+        add_button.pack(pady=5)
+        
+        # File Operations Section
+        file_frame = ttk.LabelFrame(parent, text="💾 File Operations", padding=10)
+        file_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        file_buttons = [
+            ("📂 Load Workflow", self.load_workflow),
+            ("💾 Save Workflow", self.save_workflow),
+            ("🆕 New Workflow", self.new_workflow),
+            ("👀 Preview YAML", self.preview_yaml)
+        ]
+        
+        for text, command in file_buttons:
+            ttk.Button(file_frame, text=text, command=command).pack(fill=tk.X, pady=2)
+        
+        # Step Operations Section
+        step_frame = ttk.LabelFrame(parent, text="🔧 Step Operations", padding=10)
+        step_frame.pack(fill=tk.BOTH, expand=True)
+        
+        step_buttons = [
+            ("⬆️ Move Up", self.move_step_up),
+            ("⬇️ Move Down", self.move_step_down),
+            ("✏️ Edit Step", self.edit_step),
+            ("🗑️ Delete Step", self.delete_step),
+            ("📋 Duplicate Step", self.duplicate_step),
+            ("🔢 Renumber Steps", self.renumber_steps)
+        ]
+        
+        for text, command in step_buttons:
+            ttk.Button(step_frame, text=text, command=command).pack(fill=tk.X, pady=2)
     
     def setup_right_panel(self, parent):
-        """Setup right panel with workflow editor"""
-        # Workflow header
-        header_frame = ttk.Frame(parent)
-        header_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(header_frame, text="⚙️ Workflow Steps", font=('Segoe UI', 12, 'bold')).pack(side=tk.LEFT)
-        
-        # Control buttons
-        controls_frame = ttk.Frame(header_frame)
-        controls_frame.pack(side=tk.RIGHT)
-        
-        ttk.Button(controls_frame, text="🔼", command=self.move_up, width=3).pack(side=tk.LEFT, padx=(0, 2))
-        ttk.Button(controls_frame, text="🔽", command=self.move_down, width=3).pack(side=tk.LEFT, padx=(0, 2))
-        ttk.Button(controls_frame, text="✏️", command=self.edit_step, width=3).pack(side=tk.LEFT, padx=(0, 2))
-        ttk.Button(controls_frame, text="🗑️", command=self.delete_step, width=3).pack(side=tk.LEFT)
-        
-        # Workflow list
-        workflow_frame = ttk.Frame(parent)
+        """Set up the right panel with workflow steps"""
+        # Workflow steps section
+        workflow_frame = ttk.LabelFrame(parent, text="⚙️ Workflow Steps", padding=10)
         workflow_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Create treeview for workflow steps
-        columns = ("Step", "Action", "Parameters")
-        self.workflow_tree = ttk.Treeview(workflow_frame, columns=columns, show="tree headings", height=15)
+        # Create treeview for steps
+        columns = ("Step", "Action", "Parameters", "Comment")
+        self.tree = ttk.Treeview(workflow_frame, columns=columns, show="headings", height=25)
         
         # Configure columns
-        self.workflow_tree.column("#0", width=50, minwidth=30)
-        self.workflow_tree.column("Step", width=60, minwidth=50)
-        self.workflow_tree.column("Action", width=200, minwidth=150)
-        self.workflow_tree.column("Parameters", width=300, minwidth=200)
+        self.tree.heading("Step", text="Step")
+        self.tree.heading("Action", text="Action")
+        self.tree.heading("Parameters", text="Parameters")
+        self.tree.heading("Comment", text="Comment")
         
-        # Configure headings
-        self.workflow_tree.heading("#0", text="#")
-        self.workflow_tree.heading("Step", text="Step")
-        self.workflow_tree.heading("Action", text="Action")
-        self.workflow_tree.heading("Parameters", text="Parameters")
+        self.tree.column("Step", width=60, anchor="center")
+        self.tree.column("Action", width=150)
+        self.tree.column("Parameters", width=300)
+        self.tree.column("Comment", width=200)
         
-        self.workflow_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Add scrollbars
+        v_scrollbar = ttk.Scrollbar(workflow_frame, orient="vertical", command=self.tree.yview)
+        h_scrollbar = ttk.Scrollbar(workflow_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
         
-        # Scrollbar
-        workflow_scroll = ttk.Scrollbar(workflow_frame, orient=tk.VERTICAL, command=self.workflow_tree.yview)
-        workflow_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.workflow_tree.config(yscrollcommand=workflow_scroll.set)
+        # Pack treeview and scrollbars
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        v_scrollbar.grid(row=0, column=1, sticky="ns")
+        h_scrollbar.grid(row=1, column=0, sticky="ew")
+        
+        workflow_frame.grid_rowconfigure(0, weight=1)
+        workflow_frame.grid_columnconfigure(0, weight=1)
         
         # Bind double-click to edit
-        self.workflow_tree.bind("<Double-1>", lambda e: self.edit_step())
+        self.tree.bind("<Double-1>", lambda e: self.edit_step())
         
-        # Populate workflow if existing
-        self.refresh_workflow_display()
+        self.refresh_tree()
     
-    def populate_actions(self):
-        """Populate the actions listbox"""
-        self.actions_listbox.delete(0, tk.END)
-        for action_id, action_def in self.action_definitions.items():
-            display_text = f"{action_def['icon']} {action_def['name']}"
-            self.actions_listbox.insert(tk.END, display_text)
+    def on_action_selected(self, event=None):
+        """Update description when action is selected"""
+        action = self.action_var.get()
+        if action in self.action_definitions:
+            desc = self.action_definitions[action]["description"]
+            self.action_desc.config(text=desc, foreground="black")
     
-    def filter_actions(self, event=None):
-        """Filter actions based on search"""
-        search_text = self.action_search.get().lower()
-        self.actions_listbox.delete(0, tk.END)
-        
-        for action_id, action_def in self.action_definitions.items():
-            if search_text in action_def['name'].lower() or search_text in action_id.lower():
-                display_text = f"{action_def['icon']} {action_def['name']}"
-                self.actions_listbox.insert(tk.END, display_text)
-    
-    def populate_templates(self):
-        """Populate the templates tree"""
-        self.template_tree.delete(*self.template_tree.get_children())
-        
-        for game, templates in self.templates.items():
-            game_node = self.template_tree.insert("", "end", text=f"🎮 {game}")
-            for template in templates:
-                self.template_tree.insert(game_node, "end", text=f"🎯 {template}")
-    
-    def add_action(self):
-        """Add selected action to workflow"""
-        selection = self.actions_listbox.curselection()
-        if not selection:
-            messagebox.showwarning("No Selection", "Please select an action to add")
+    def add_step(self):
+        """Add a new step to the workflow"""
+        action = self.action_var.get()
+        if not action:
+            messagebox.showwarning("Warning", "Please select an action type")
             return
         
-        # Get action ID from selection
-        action_keys = list(self.action_definitions.keys())
-        action_id = action_keys[selection[0]]
-        action_def = self.action_definitions[action_id]
+        comment = self.comment_var.get().strip()
         
-        # Create step with default parameters
-        step = {"action": action_id}
-        for param_name, param_def in action_def["params"].items():
-            step[param_name] = param_def["default"]
-        
-        # Add to workflow
-        self.workflow_steps.append(step)
-        self.refresh_workflow_display()
+        # Create step dialog for parameters
+        step_data = self.create_step_dialog(action, comment)
+        if step_data:
+            self.step_counter += 1
+            step_data['step_number'] = self.step_counter
+            if comment:
+                step_data['comment'] = comment
+            
+            self.workflow_steps.append(step_data)
+            self.refresh_tree()
+            
+            # Clear comment field
+            self.comment_var.set("")
     
-    def refresh_workflow_display(self):
-        """Refresh the workflow display"""
-        self.workflow_tree.delete(*self.workflow_tree.get_children())
+    def create_step_dialog(self, action, comment="", existing_step=None):
+        """Create a dialog for step parameters"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Configure Step: {action}")
+        dialog.geometry("500x600")
+        dialog.transient(self.root)
+        dialog.grab_set()
         
+        # Center dialog
+        dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 100, self.root.winfo_rooty() + 100))
+        
+        main_frame = ttk.Frame(dialog, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        ttk.Label(main_frame, text=f"Configure: {action}", 
+                 font=("Arial", 12, "bold")).pack(pady=(0, 10))
+        
+        # Description
+        desc = self.action_definitions[action]["description"]
+        ttk.Label(main_frame, text=desc, foreground="gray").pack(pady=(0, 15))
+        
+        # Comment field
+        ttk.Label(main_frame, text="Comment:").pack(anchor="w")
+        comment_var = tk.StringVar(value=comment)
+        comment_entry = ttk.Entry(main_frame, textvariable=comment_var, width=60)
+        comment_entry.pack(fill=tk.X, pady=(2, 15))
+        
+        # Parameters frame with scrollbar
+        canvas = tk.Canvas(main_frame)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Parameters
+        param_vars = {}
+        parameters = self.action_definitions[action]["parameters"]
+        
+        for param in parameters:
+            param_frame = ttk.Frame(scrollable_frame)
+            param_frame.pack(fill=tk.X, pady=5)
+            
+            ttk.Label(param_frame, text=f"{param}:", width=20).pack(side=tk.LEFT)
+            
+            # Get existing value if editing
+            existing_value = ""
+            if existing_step and param in existing_step:
+                existing_value = existing_step[param]
+            
+            # Create appropriate widget based on parameter
+            if param in ["templates"]:
+                # Multiple templates - text area
+                var = tk.StringVar(value=str(existing_value) if existing_value else "")
+                entry = ttk.Entry(param_frame, textvariable=var, width=40)
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                ttk.Label(param_frame, text="(comma-separated)", foreground="gray").pack(side=tk.RIGHT)
+            elif param in ["timeout", "duration", "seconds", "x", "y", "max_retries", "retry_delay"]:
+                # Numeric fields
+                var = tk.StringVar(value=str(existing_value) if existing_value else "")
+                entry = ttk.Entry(param_frame, textvariable=var, width=40)
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            elif param in ["threshold", "move_duration", "pre_click_delay", "post_click_delay"]:
+                # Float fields
+                var = tk.StringVar(value=str(existing_value) if existing_value else "")
+                entry = ttk.Entry(param_frame, textvariable=var, width=40)
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            elif param == "button":
+                # Button type dropdown
+                var = tk.StringVar(value=existing_value or "left")
+                combo = ttk.Combobox(param_frame, textvariable=var, 
+                                   values=["left", "right", "middle"], state="readonly", width=37)
+                combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            elif param == "force":
+                # Boolean checkbox
+                var = tk.BooleanVar(value=existing_value or False)
+                check = ttk.Checkbutton(param_frame, variable=var)
+                check.pack(side=tk.LEFT)
+            elif param in ["region", "offset"]:
+                # List/tuple fields
+                var = tk.StringVar(value=str(existing_value) if existing_value else "")
+                entry = ttk.Entry(param_frame, textvariable=var, width=40)
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                ttk.Label(param_frame, text="[x1,y1,x2,y2]" if param == "region" else "[x,y]", 
+                         foreground="gray").pack(side=tk.RIGHT)
+            else:
+                # Default text field
+                var = tk.StringVar(value=str(existing_value) if existing_value else "")
+                entry = ttk.Entry(param_frame, textvariable=var, width=40)
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            
+            param_vars[param] = var
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Global parameters
+        global_frame = ttk.LabelFrame(main_frame, text="Global Parameters")
+        global_frame.pack(fill=tk.X, pady=(15, 10))
+        
+        optional_var = tk.BooleanVar(value=existing_step.get('optional', False) if existing_step else False)
+        ttk.Checkbutton(global_frame, text="Optional (don't stop workflow on failure)", 
+                       variable=optional_var).pack(anchor="w", padx=5, pady=2)
+        
+        step_delay_var = tk.StringVar(value=str(existing_step.get('step_delay', '')) if existing_step else "")
+        delay_frame = ttk.Frame(global_frame)
+        delay_frame.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(delay_frame, text="Step delay (seconds):").pack(side=tk.LEFT)
+        ttk.Entry(delay_frame, textvariable=step_delay_var, width=10).pack(side=tk.LEFT, padx=(5, 0))
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        result = [None]
+        
+        def on_ok():
+            step_data = {"action": action}
+            
+            # Add comment if provided
+            comment_text = comment_var.get().strip()
+            if comment_text:
+                step_data["comment"] = comment_text
+            
+            # Add parameters
+            for param, var in param_vars.items():
+                value = var.get()
+                if value:  # Only add non-empty values
+                    # Convert values to appropriate types
+                    if param in ["timeout", "duration", "seconds", "x", "y", "max_retries", "retry_delay", "startup_time"]:
+                        try:
+                            step_data[param] = int(value)
+                        except ValueError:
+                            messagebox.showerror("Error", f"Invalid number for {param}: {value}")
+                            return
+                    elif param in ["threshold", "move_duration", "pre_click_delay", "post_click_delay"]:
+                        try:
+                            step_data[param] = float(value)
+                        except ValueError:
+                            messagebox.showerror("Error", f"Invalid decimal for {param}: {value}")
+                            return
+                    elif param in ["region", "offset"]:
+                        try:
+                            # Parse list/tuple
+                            import ast
+                            step_data[param] = ast.literal_eval(value)
+                        except:
+                            messagebox.showerror("Error", f"Invalid format for {param}: {value}")
+                            return
+                    elif param == "templates":
+                        # Split comma-separated values
+                        step_data[param] = [t.strip() for t in value.split(",") if t.strip()]
+                    else:
+                        step_data[param] = value
+            
+            # Add global parameters
+            if optional_var.get():
+                step_data["optional"] = True
+            
+            step_delay = step_delay_var.get().strip()
+            if step_delay:
+                try:
+                    step_data["step_delay"] = float(step_delay)
+                except ValueError:
+                    messagebox.showerror("Error", f"Invalid step delay: {step_delay}")
+                    return
+            
+            result[0] = step_data
+            dialog.destroy()
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        ttk.Button(button_frame, text="OK", command=on_ok).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side=tk.RIGHT)
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        return result[0]
+    
+    def refresh_tree(self):
+        """Refresh the workflow tree display"""
+        # Clear existing items
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        # Add steps
         for i, step in enumerate(self.workflow_steps):
-            action_id = step.get("action", "unknown")
-            action_def = self.action_definitions.get(action_id, {"name": action_id, "icon": "❓"})
+            step_num = step.get('step_number', i + 1)
+            action = step.get('action', '')
+            comment = step.get('comment', '')
             
             # Build parameters string
             params = []
             for key, value in step.items():
-                if key != "action":
-                    if isinstance(value, str) and len(value) > 30:
-                        value = value[:27] + "..."
+                if key not in ['action', 'comment', 'step_number']:
                     params.append(f"{key}: {value}")
+            params_str = ", ".join(params)
             
-            params_str = ", ".join(params) if params else "No parameters"
-            
-            # Insert into tree
-            self.workflow_tree.insert("", "end", 
-                                    text=str(i+1),
-                                    values=(i+1, f"{action_def['icon']} {action_def['name']}", params_str))
+            self.tree.insert("", "end", values=(step_num, action, params_str, comment))
     
-    def move_up(self):
+    def get_selected_step_index(self):
+        """Get the index of the currently selected step"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Warning", "Please select a step")
+            return None
+        
+        item = selection[0]
+        return self.tree.index(item)
+    
+    def move_step_up(self):
         """Move selected step up"""
-        selection = self.workflow_tree.selection()
-        if not selection:
+        index = self.get_selected_step_index()
+        if index is None or index == 0:
             return
         
-        # Get index
-        item = selection[0]
-        index = self.workflow_tree.index(item)
+        # Swap steps
+        self.workflow_steps[index], self.workflow_steps[index - 1] = \
+            self.workflow_steps[index - 1], self.workflow_steps[index]
         
-        if index > 0:
-            # Swap in list
-            self.workflow_steps[index], self.workflow_steps[index-1] = \
-                self.workflow_steps[index-1], self.workflow_steps[index]
-            
-            self.refresh_workflow_display()
-            
-            # Reselect moved item
-            new_item = self.workflow_tree.get_children()[index-1]
-            self.workflow_tree.selection_set(new_item)
+        self.refresh_tree()
+        # Reselect the moved item
+        children = self.tree.get_children()
+        if index - 1 < len(children):
+            self.tree.selection_set(children[index - 1])
     
-    def move_down(self):
+    def move_step_down(self):
         """Move selected step down"""
-        selection = self.workflow_tree.selection()
-        if not selection:
+        index = self.get_selected_step_index()
+        if index is None or index >= len(self.workflow_steps) - 1:
             return
         
-        # Get index
-        item = selection[0]
-        index = self.workflow_tree.index(item)
+        # Swap steps
+        self.workflow_steps[index], self.workflow_steps[index + 1] = \
+            self.workflow_steps[index + 1], self.workflow_steps[index]
         
-        if index < len(self.workflow_steps) - 1:
-            # Swap in list
-            self.workflow_steps[index], self.workflow_steps[index+1] = \
-                self.workflow_steps[index+1], self.workflow_steps[index]
-            
-            self.refresh_workflow_display()
-            
-            # Reselect moved item
-            new_item = self.workflow_tree.get_children()[index+1]
-            self.workflow_tree.selection_set(new_item)
+        self.refresh_tree()
+        # Reselect the moved item
+        children = self.tree.get_children()
+        if index + 1 < len(children):
+            self.tree.selection_set(children[index + 1])
     
     def edit_step(self):
-        """Edit selected step"""
-        selection = self.workflow_tree.selection()
-        if not selection:
+        """Edit the selected step"""
+        index = self.get_selected_step_index()
+        if index is None:
             return
         
-        # Get index
-        item = selection[0]
-        index = self.workflow_tree.index(item)
         step = self.workflow_steps[index]
+        action = step['action']
+        comment = step.get('comment', '')
         
-        # Open parameter editor
-        self.open_parameter_editor(step, index)
+        # Open edit dialog
+        updated_step = self.create_step_dialog(action, comment, step)
+        if updated_step:
+            # Preserve step number
+            updated_step['step_number'] = step.get('step_number', index + 1)
+            self.workflow_steps[index] = updated_step
+            self.refresh_tree()
     
     def delete_step(self):
-        """Delete selected step"""
-        selection = self.workflow_tree.selection()
-        if not selection:
+        """Delete the selected step"""
+        index = self.get_selected_step_index()
+        if index is None:
             return
         
         if messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this step?"):
-            # Get index BEFORE showing dialog (dialog can change selection)
-            item = selection[0]
-            try:
-                index = self.workflow_tree.index(item)
-                # Remove from list
-                del self.workflow_steps[index]
-                self.refresh_workflow_display()
-            except tk.TclError:
-                # Item no longer exists, just refresh
-                self.refresh_workflow_display()
+            del self.workflow_steps[index]
+            self.refresh_tree()
     
-    def open_parameter_editor(self, step, index):
-        """Open parameter editor dialog"""
-        action_id = step.get("action")
-        action_def = self.action_definitions.get(action_id)
-        
-        if not action_def:
-            messagebox.showerror("Error", f"Unknown action: {action_id}")
+    def duplicate_step(self):
+        """Duplicate the selected step"""
+        index = self.get_selected_step_index()
+        if index is None:
             return
         
-        # Create editor window
-        editor = tk.Toplevel(self.window)
-        editor.title(f"Edit {action_def['name']}")
-        editor.geometry("500x600")
-        editor.transient(self.window)
-        editor.grab_set()
+        step = self.workflow_steps[index].copy()
+        self.step_counter += 1
+        step['step_number'] = self.step_counter
         
-        # Center the dialog
-        editor.geometry("+%d+%d" % (self.window.winfo_rootx() + 100, self.window.winfo_rooty() + 100))
-        
-        # Main frame
-        main_frame = ttk.Frame(editor, padding=20)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Title
-        title_label = ttk.Label(main_frame, text=f"{action_def['icon']} {action_def['name']}", 
-                               font=('Segoe UI', 14, 'bold'))
-        title_label.pack(pady=(0, 20))
-        
-        # Parameters frame
-        params_frame = ttk.Labelframe(main_frame, text="Parameters", padding=10)
-        params_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
-        
-        # Create parameter widgets
-        param_widgets = {}
-        
-        for param_name, param_def in action_def["params"].items():
-            param_frame = ttk.Frame(params_frame)
-            param_frame.pack(fill=tk.X, pady=5)
-            
-            # Label
-            ttk.Label(param_frame, text=param_def["label"] + ":").pack(anchor=tk.W)
-            
-            # Widget based on type
-            current_value = step.get(param_name, param_def["default"])
-            
-            if param_def["type"] == "string":
-                widget = ttk.Entry(param_frame)
-                widget.insert(0, str(current_value))
-                widget.pack(fill=tk.X, pady=(2, 0))
-                param_widgets[param_name] = widget
-                
-            elif param_def["type"] == "int":
-                widget = ttk.Spinbox(param_frame, from_=0, to=9999, value=current_value)
-                widget.pack(fill=tk.X, pady=(2, 0))
-                param_widgets[param_name] = widget
-                
-            elif param_def["type"] == "float":
-                widget = ttk.Spinbox(param_frame, 
-                                   from_=param_def.get("min", 0.0), 
-                                   to=param_def.get("max", 999.0),
-                                   increment=0.1, value=current_value)
-                widget.pack(fill=tk.X, pady=(2, 0))
-                param_widgets[param_name] = widget
-                
-            elif param_def["type"] == "bool":
-                var = tk.BooleanVar(value=current_value)
-                widget = ttk.Checkbutton(param_frame, variable=var)
-                widget.pack(anchor=tk.W, pady=(2, 0))
-                param_widgets[param_name] = var
-                
-            elif param_def["type"] == "choice":
-                widget = ttk.Combobox(param_frame, values=param_def["choices"], state="readonly")
-                widget.set(current_value)
-                widget.pack(fill=tk.X, pady=(2, 0))
-                param_widgets[param_name] = widget
-                
-            elif param_def["type"] == "template":
-                # Template selector with browse
-                template_frame = ttk.Frame(param_frame)
-                template_frame.pack(fill=tk.X, pady=(2, 0))
-                
-                widget = ttk.Combobox(template_frame, state="readonly")
-                widget.pack(side=tk.LEFT, fill=tk.X, expand=True)
-                
-                # Populate with available templates
-                all_templates = []
-                for game, templates in self.templates.items():
-                    for template in templates:
-                        all_templates.append(template)
-                widget['values'] = all_templates
-                widget.set(current_value)
-                
-                ttk.Button(template_frame, text="📁", width=3,
-                          command=lambda w=widget: self.browse_template(w)).pack(side=tk.RIGHT, padx=(5, 0))
-                
-                param_widgets[param_name] = widget
-        
-        # Buttons
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X)
-        
-        def save_parameters():
-            # Update step with new values
-            for param_name, widget in param_widgets.items():
-                if isinstance(widget, tk.BooleanVar):
-                    step[param_name] = widget.get()
-                else:
-                    value = widget.get()
-                    param_def = action_def["params"][param_name]
-                    
-                    # Convert types
-                    if param_def["type"] == "int":
-                        try:
-                            value = int(value)
-                        except ValueError:
-                            value = param_def["default"]
-                    elif param_def["type"] == "float":
-                        try:
-                            value = float(value)
-                        except ValueError:
-                            value = param_def["default"]
-                    
-                    step[param_name] = value
-            
-            # Update display
-            self.refresh_workflow_display()
-            editor.destroy()
-        
-        ttk.Button(button_frame, text="💾 Save", command=save_parameters).pack(side=tk.RIGHT, padx=(5, 0))
-        ttk.Button(button_frame, text="❌ Cancel", command=editor.destroy).pack(side=tk.RIGHT)
+        # Insert after current step
+        self.workflow_steps.insert(index + 1, step)
+        self.refresh_tree()
     
-    def browse_template(self, widget):
-        """Browse for template file"""
-        filename = filedialog.askopenfilename(
-            title="Select Template",
-            initialdir="templates/screens",
-            filetypes=[("PNG files", "*.png"), ("All files", "*.*")]
-        )
-        
-        if filename:
-            # Extract just the filename
-            template_name = Path(filename).name
-            widget.set(template_name)
-    
-    def refresh_templates(self):
-        """Refresh template list"""
-        self.templates = self._load_templates()
-        self.populate_templates()
-        messagebox.showinfo("Templates Refreshed", "Template list has been updated")
-    
-    def validate_workflow(self):
-        """Validate the current workflow"""
-        errors = []
-        warnings = []
-        
-        if not self.workflow_steps:
-            errors.append("Workflow is empty")
-        
+    def renumber_steps(self):
+        """Renumber all steps sequentially"""
         for i, step in enumerate(self.workflow_steps):
-            step_num = i + 1
-            action_id = step.get("action")
-            
-            if not action_id:
-                errors.append(f"Step {step_num}: No action specified")
-                continue
-            
-            action_def = self.action_definitions.get(action_id)
-            if not action_def:
-                errors.append(f"Step {step_num}: Unknown action '{action_id}'")
-                continue
-            
-            # Check required parameters
-            for param_name, param_def in action_def["params"].items():
-                if param_name not in step:
-                    warnings.append(f"Step {step_num}: Missing parameter '{param_name}'")
-                elif param_def["type"] == "template":
-                    template = step[param_name]
-                    if template and not self._template_exists(template):
-                        warnings.append(f"Step {step_num}: Template '{template}' not found")
+            step['step_number'] = i + 1
         
-        # Show results
-        if errors:
-            messagebox.showerror("Validation Errors", "\n".join(errors))
-        elif warnings:
-            messagebox.showwarning("Validation Warnings", "\n".join(warnings))
-        else:
-            messagebox.showinfo("Validation Passed", "Workflow validation completed successfully!")
-    
-    def _template_exists(self, template_name):
-        """Check if template exists"""
-        for game, templates in self.templates.items():
-            if template_name in templates:
-                return True
-        return False
+        self.step_counter = len(self.workflow_steps)
+        self.refresh_tree()
+        messagebox.showinfo("Success", "Steps renumbered successfully!")
     
     def new_workflow(self):
-        """Create new workflow"""
-        if self.workflow_steps and messagebox.askyesno("Confirm", "Clear current workflow?"):
+        """Create a new workflow"""
+        if messagebox.askyesno("New Workflow", "This will clear the current workflow. Continue?"):
             self.workflow_steps = []
-            self.refresh_workflow_display()
+            self.step_counter = 0
+            
+            # Reset game config
+            for key, var in self.config_vars.items():
+                if key == "type":
+                    var.set("steam")
+                elif key == "startup_time":
+                    var.set(60)
+                else:
+                    var.set("")
+            
+            self.refresh_tree()
     
-    def open_workflow(self):
-        """Open workflow from file"""
-        filename = filedialog.askopenfilename(
-            title="Open Workflow",
+    def load_workflow(self):
+        """Load workflow from YAML file"""
+        file_path = filedialog.askopenfilename(
+            title="Load Workflow",
             initialdir="config/games",
             filetypes=[("YAML files", "*.yaml"), ("All files", "*.*")]
         )
         
-        if filename:
-            try:
-                with open(filename, 'r') as f:
-                    data = yaml.safe_load(f)
-                
-                workflow = data.get('workflow', [])
-                if workflow:
-                    self.workflow_steps = workflow
-                    self.refresh_workflow_display()
-                    messagebox.showinfo("Success", f"Loaded {len(workflow)} steps")
-                else:
-                    messagebox.showwarning("No Workflow", "No workflow found in file")
-                    
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to load workflow: {e}")
-    
-    def save_workflow(self):
-        """Save workflow to current game config"""
-        if not self.game_name:
-            self.save_workflow_as()
+        if not file_path:
             return
         
-        config_path = Path("config/games") / f"{self.game_name.lower().replace(' ', '_')}.yaml"
+        try:
+            with open(file_path, 'r') as f:
+                data = yaml.safe_load(f)
+            
+            if not isinstance(data, dict):
+                messagebox.showerror("Error", "Invalid YAML format - expected dictionary")
+                return
+            
+            # Load game config with type conversion
+            for key, var in self.config_vars.items():
+                if key in data:
+                    value = data[key]
+                    # Convert all values to strings for tkinter variables
+                    var.set(str(value) if value is not None else "")
+            
+            # Load workflow steps
+            workflow_data = data.get('workflow', [])
+            if not isinstance(workflow_data, list):
+                messagebox.showerror("Error", "Workflow must be a list of steps")
+                return
+            
+            # Clean and process workflow steps
+            self.workflow_steps = []
+            for i, step in enumerate(workflow_data):
+                # Skip non-dictionary entries (comments, etc.)
+                if isinstance(step, dict) and 'action' in step:
+                    # Ensure step has required fields
+                    clean_step = step.copy()
+                    if 'step_number' not in clean_step:
+                        clean_step['step_number'] = i + 1
+                    self.workflow_steps.append(clean_step)
+            
+            self.step_counter = len(self.workflow_steps)
+            self.refresh_tree()
+            
+            messagebox.showinfo("Success", f"Workflow loaded from {file_path}")
+            
+        except yaml.YAMLError as e:
+            messagebox.showerror("Error", f"Invalid YAML file: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load workflow: {e}")
+    
+    def save_workflow(self):
+        """Save workflow to YAML file"""
+        # Update game config from UI
+        for key, var in self.config_vars.items():
+            self.game_config[key] = var.get()
+        
+        # Generate YAML
+        yaml_content = self.generate_yaml()
+        
+        # Get save path
+        game_name = self.config_vars['name'].get() or "new_game"
+        filename = f"{game_name.lower().replace(' ', '_')}.yaml"
+        
+        file_path = filedialog.asksaveasfilename(
+            title="Save Workflow",
+            initialdir="config/games",
+            initialfile=filename,
+            filetypes=[("YAML files", "*.yaml"), ("All files", "*.*")]
+        )
+        
+        if not file_path:
+            return
         
         try:
-            # Load existing config
-            if config_path.exists():
-                with open(config_path, 'r') as f:
-                    config = yaml.safe_load(f) or {}
-            else:
-                config = {"name": self.game_name}
+            with open(file_path, 'w') as f:
+                f.write(yaml_content)
             
-            # Update workflow
-            config['workflow'] = self.workflow_steps
-            
-            # Save
-            with open(config_path, 'w') as f:
-                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-            
-            messagebox.showinfo("Success", f"Workflow saved to {config_path}")
+            messagebox.showinfo("Success", f"Workflow saved to {file_path}")
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save workflow: {e}")
     
-    def save_workflow_as(self):
-        """Save workflow as new file"""
-        filename = filedialog.asksaveasfilename(
-            title="Save Workflow As",
-            initialdir="config/games",
-            defaultextension=".yaml",
-            filetypes=[("YAML files", "*.yaml"), ("All files", "*.*")]
-        )
+    def preview_yaml(self):
+        """Preview the generated YAML"""
+        # Update game config from UI
+        for key, var in self.config_vars.items():
+            self.game_config[key] = var.get()
         
-        if filename:
-            try:
-                config = {
-                    "name": Path(filename).stem,
-                    "workflow": self.workflow_steps
-                }
-                
-                with open(filename, 'w') as f:
-                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-                
-                messagebox.showinfo("Success", f"Workflow saved to {filename}")
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to save workflow: {e}")
+        yaml_content = self.generate_yaml()
+        
+        # Create preview window
+        preview_window = tk.Toplevel(self.root)
+        preview_window.title("YAML Preview")
+        preview_window.geometry("800x600")
+        
+        # Text widget with scrollbar
+        text_frame = ttk.Frame(preview_window)
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        text_widget = tk.Text(text_frame, font=("Consolas", 10))
+        scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_widget.yview)
+        text_widget.configure(yscrollcommand=scrollbar.set)
+        
+        text_widget.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        text_widget.insert("1.0", yaml_content)
+        text_widget.config(state="disabled")
+        
+        # Copy button
+        def copy_to_clipboard():
+            self.root.clipboard_clear()
+            self.root.clipboard_append(yaml_content)
+            messagebox.showinfo("Copied", "YAML content copied to clipboard!")
+        
+        ttk.Button(preview_window, text="📋 Copy to Clipboard", 
+                  command=copy_to_clipboard).pack(pady=5)
     
-    def export_yaml(self):
-        """Export just the workflow as YAML"""
-        filename = filedialog.asksaveasfilename(
-            title="Export Workflow YAML",
-            defaultextension=".yaml",
-            filetypes=[("YAML files", "*.yaml"), ("All files", "*.*")]
-        )
+    def generate_yaml(self):
+        """Generate YAML content from current configuration"""
+        lines = []
         
-        if filename:
-            try:
-                with open(filename, 'w') as f:
-                    yaml.dump({"workflow": self.workflow_steps}, f, default_flow_style=False)
+        # Add game configuration
+        for key, var in self.config_vars.items():
+            value = var.get()
+            if key == "startup_time":
+                lines.append(f"{key}: {int(value) if value else 60}")
+            elif key in ["app_id"]:
+                lines.append(f'{key}: "{value}"')
+            else:
+                lines.append(f'{key}: "{value}"')
+        
+        lines.append("\nworkflow:")
+        
+        # Add workflow steps with proper comment formatting
+        for i, step in enumerate(self.workflow_steps):
+            # Add comment if exists - preserve exact spacing
+            comment = step.get('comment', '').strip()
+            if comment:
+                lines.append(f"  # {comment}")
+            
+            # Add step number comment
+            step_num = step.get('step_number', i + 1)
+            lines.append(f"  #{step_num}")
+            
+            # Build step
+            lines.append(f"  - action: \"{step['action']}\"")
+            
+            # Add parameters in logical order
+            param_order = ["template", "templates", "timeout", "threshold", "region", "button", "offset",
+                          "move_duration", "pre_click_delay", "post_click_delay", "key", "duration", 
+                          "text", "x", "y", "seconds", "name", "message", "force", "process_name",
+                          "action_to_retry", "max_retries", "retry_delay", "optional", "step_delay"]
+            
+            # Add parameters
+            for param in param_order:
+                if param in step and param not in ['action', 'comment', 'step_number']:
+                    value = step[param]
+                    if isinstance(value, str):
+                        lines.append(f'    {param}: "{value}"')
+                    elif isinstance(value, list):
+                        if param == "templates":
+                            lines.append(f'    {param}: {value}')
+                        else:
+                            lines.append(f'    {param}: {value}')
+                    else:
+                        lines.append(f'    {param}: {value}')
+            
+            # Add any remaining parameters
+            for key, value in step.items():
+                if key not in param_order and key not in ['action', 'comment', 'step_number']:
+                    if isinstance(value, str):
+                        lines.append(f'    {key}: "{value}"')
+                    else:
+                        lines.append(f'    {key}: {value}')
+            
+            lines.append("")  # Empty line between steps
+        
+        return '\n'.join(lines)
+    
+    def load_existing_workflow(self):
+        """Load existing workflow into the builder"""
+        self.refresh_tree()
+    
+    def refresh_templates(self):
+        """Refresh the template list from the templates directory"""
+        self.template_listbox.delete(0, tk.END)
+        
+        templates_dir = Path("templates/screens")
+        if not templates_dir.exists():
+            self.template_listbox.insert(tk.END, "No templates directory found")
+            return
+        
+        template_files = []
+        for game_dir in templates_dir.iterdir():
+            if game_dir.is_dir():
+                for template_file in game_dir.glob("*.png"):
+                    relative_path = template_file.relative_to(templates_dir)
+                    template_files.append(str(relative_path))
+        
+        if not template_files:
+            self.template_listbox.insert(tk.END, "No template files found")
+            return
+        
+        for template in sorted(template_files):
+            self.template_listbox.insert(tk.END, template)
+    
+    def on_template_double_click(self, event):
+        """Handle double-click on template to preview it"""
+        selection = self.template_listbox.curselection()
+        if not selection:
+            return
+        
+        template_name = self.template_listbox.get(selection[0])
+        if template_name in ["No templates directory found", "No template files found"]:
+            return
+        
+        self.preview_template(template_name)
+    
+    def browse_templates(self):
+        """Open templates folder in file explorer"""
+        templates_dir = Path("templates/screens")
+        templates_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                subprocess.run(['explorer', str(templates_dir.resolve())])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(['open', str(templates_dir.resolve())])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(templates_dir.resolve())])
                 
-                messagebox.showinfo("Success", f"Workflow exported to {filename}")
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to export workflow: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open templates folder: {e}")
+    
+    def preview_template(self, template_name):
+        """Preview a template image"""
+        try:
+            import PIL.Image
+            import PIL.ImageTk
+            
+            template_path = Path("templates/screens") / template_name
+            if not template_path.exists():
+                messagebox.showerror("Error", f"Template not found: {template_path}")
+                return
+            
+            # Create preview window
+            preview_window = tk.Toplevel(self.root)
+            preview_window.title(f"Template Preview: {template_name}")
+            preview_window.geometry("600x500")
+            
+            # Load and display image
+            image = PIL.Image.open(template_path)
+            
+            # Resize if too large
+            max_size = (550, 400)
+            image.thumbnail(max_size, PIL.Image.Resampling.LANCZOS)
+            
+            photo = PIL.ImageTk.PhotoImage(image)
+            
+            # Create image label
+            image_label = tk.Label(preview_window, image=photo)
+            image_label.image = photo  # Keep a reference
+            image_label.pack(padx=10, pady=10)
+            
+            # Info frame
+            info_frame = ttk.Frame(preview_window)
+            info_frame.pack(fill=tk.X, padx=10, pady=5)
+            
+            ttk.Label(info_frame, text=f"File: {template_name}").pack(anchor="w")
+            ttk.Label(info_frame, text=f"Size: {image.size[0]}x{image.size[1]} pixels").pack(anchor="w")
+            ttk.Label(info_frame, text=f"Path: {template_path}").pack(anchor="w")
+            
+            # Copy filename button
+            def copy_filename():
+                filename = Path(template_name).name
+                self.root.clipboard_clear()
+                self.root.clipboard_append(filename)
+                messagebox.showinfo("Copied", f"Filename '{filename}' copied to clipboard!")
+            
+            ttk.Button(info_frame, text="📋 Copy Filename", 
+                      command=copy_filename).pack(pady=5)
+                      
+        except ImportError:
+            messagebox.showerror("Error", "PIL/Pillow is required for template preview. Install with: pip install Pillow")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to preview template: {e}")
 
-
+# Main function to run the workflow builder
 def main():
-    """Run workflow builder standalone"""
     app = WorkflowBuilder()
-    app.window.mainloop()
+    app.root.mainloop()
 
 if __name__ == "__main__":
     main()

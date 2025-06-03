@@ -1,0 +1,33 @@
+name: "Dota2"
+type: "steam"
+app_id: "570"
+exe_name: "dota2.exe"
+process_name: "dota2"
+launch_options: "-novid"
+startup_time: 60
+
+workflow:
+  # #========GAME LAUNCH=======
+  #1
+  - action: "launch_game"
+    step_delay: 2.0
+
+  #2
+  - action: "wait_for_game"
+    timeout: 60
+
+  #3
+  - action: "wait"
+    seconds: 30
+
+  # #===== WAIT FOR MAIN MENU =====
+  #4
+  - action: "wait_for_template"
+    template: "main_menu.png"
+    timeout: 90
+    threshold: 0.9
+
+  #5
+  - action: "take_screenshot"
+    name: "01_main_menu_loaded"
+    step_delay: 1.0

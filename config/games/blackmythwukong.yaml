@@ -165,15 +165,18 @@ workflow:
   
   #30
   - action: "wait_for_template"
-    template: "exit_button"
-    timeout: 10
-    threshold: 0.90
-    delay: 5
-  
+    template: "exit_game.png"
+
   #31
+  - action: "click_template"
+    template: "exit_game.png"
+    threshold: 0.90
+    delay: 2
+  
+  #32
   - action: "take_screenshot"
     template: "12_game_exited"
 
-  #32
+  #33
   - action: "press_key"
     key: "enter"
