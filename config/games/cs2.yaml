@@ -3,7 +3,7 @@ type: "steam"
 app_id: "730"
 exe_name: "cs2.exe"
 process_name: "cs2"
-launch_options: "-novid -console fps_max 0"
+launch_options: "-novid -console +fps_max 0"
 startup_time: 60
 
 workflow:

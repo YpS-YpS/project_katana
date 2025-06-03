@@ -3,7 +3,7 @@ type: "steam"
 app_id: "570"
 exe_name: "dota2.exe"
 process_name: "dota2"
-launch_options: "-novid"
+launch_options: "-novid +fps_max 0"
 startup_time: 60
 
 workflow:
